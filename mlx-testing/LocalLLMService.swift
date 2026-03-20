@@ -28,16 +28,8 @@ protocol LLMService: AnyObject {
 @MainActor
 final class LocalLLMServiceMLX: LLMService {
 
-    // ── Configurable knobs ─────────────────────────────────────────────
-    /// Change this to try a different model from `LLMRegistry`.
-    /// With 24 GB unified memory, 8B 4-bit models run comfortably (~5 GB).
-    /// Other options that fit well:
-    ///   - LLMRegistry.qwen3_4b_4bit       (~2.5 GB, faster, lighter)
-    ///   - LLMRegistry.llama3_1_8B_4bit     (~5 GB)
-    ///   - LLMRegistry.gemma_2_9b_it_4bit   (~6 GB)
-    ///   - LLMRegistry.qwen3MoE_30b_a3b_4bit (~17 GB, 30B total but only 3B active)
-    ///   - LLMRegistry.glm4_9b_4bit         (~6 GB, tool calling)
-    var modelConfiguration: ModelConfiguration = LLMRegistry.qwen3_8b_4bit
+    // ── Model configuration (set by ChatViewModel) ─────────────────────
+    private(set) var modelConfiguration: ModelConfiguration
 
     /// Generation parameters (temperature, max tokens, etc.).
     var generateParameters: GenerateParameters = GenerateParameters(
@@ -57,6 +49,12 @@ final class LocalLLMServiceMLX: LLMService {
     private var currentSystemPrompt: String?
     private var chatSession: ChatSession?
 
+    // ── Init ───────────────────────────────────────────────────────────
+
+    init(configuration: ModelConfiguration = ModelInfo.defaultModel.configuration) {
+        self.modelConfiguration = configuration
+    }
+
     // ── Loading ────────────────────────────────────────────────────────
 
     func load() async throws {
@@ -65,7 +63,6 @@ final class LocalLLMServiceMLX: LLMService {
         statusMessage = "Downloading model…"
         downloadProgress = 0.0
 
-        // Limit the MLX buffer cache so we don't hog memory
         MLX.GPU.set(cacheLimit: 20 * 1024 * 1024)
 
         let container = try await LLMModelFactory.shared.loadContainer(
@@ -84,10 +81,22 @@ final class LocalLLMServiceMLX: LLMService {
         statusMessage = "Model loaded"
     }
 
+    // ── Model switching ────────────────────────────────────────────────
+
+    /// Tear down the current model and prepare to load a new one.
+    func switchModel(to configuration: ModelConfiguration) {
+        cancelGeneration()
+        modelContainer = nil
+        chatSession = nil
+        currentSystemPrompt = nil
+        isLoaded = false
+        downloadProgress = 0
+        modelConfiguration = configuration
+        statusMessage = "Ready to load new model"
+    }
+
     // ── Session management ─────────────────────────────────────────────
 
-    /// Returns a ChatSession configured with the given system prompt.
-    /// Rebuilds the session if the prompt has changed since last call.
     private func session(for systemPrompt: String) -> ChatSession? {
         guard let container = modelContainer else { return nil }
 
@@ -95,7 +104,6 @@ final class LocalLLMServiceMLX: LLMService {
             return existing
         }
 
-        // Build a fresh session with the new composed prompt
         let session = ChatSession(
             container,
             instructions: systemPrompt,

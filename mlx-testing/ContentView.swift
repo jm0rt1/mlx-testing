@@ -17,7 +17,8 @@ struct ContentView: View {
                     status: vm.status,
                     isDownloading: vm.isDownloading,
                     progress: vm.downloadProgress,
-                    enabledContextCount: vm.contextStore.bubbles.filter(\.isEnabled).count
+                    enabledContextCount: vm.contextStore.bubbles.filter(\.isEnabled).count,
+                    modelName: ModelInfo.find(id: vm.selectedModelID)?.displayName ?? "Unknown"
                 )
 
                 Divider()
@@ -55,6 +56,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 700, minHeight: 500)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                ModelPickerView(selectedModelID: $vm.selectedModelID)
+                    .disabled(vm.isLoading)
+            }
+
             ToolbarItemGroup(placement: .automatic) {
                 Button {
                     showSystemPrompt = true
@@ -99,6 +105,7 @@ private struct StatusBar: View {
     let isDownloading: Bool
     let progress: Double
     let enabledContextCount: Int
+    let modelName: String
 
     var body: some View {
         VStack(spacing: 4) {
@@ -113,6 +120,15 @@ private struct StatusBar: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                // Model name indicator
+                HStack(spacing: 3) {
+                    Image(systemName: "cpu")
+                        .imageScale(.small)
+                    Text(modelName)
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
 
                 // Context indicator
                 if enabledContextCount > 0 {

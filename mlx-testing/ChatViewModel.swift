@@ -25,6 +25,16 @@ final class ChatViewModel: ObservableObject {
         didSet { switchService() }
     }
 
+    /// Currently selected model ID (persisted via UserDefaults).
+    @Published var selectedModelID: String {
+        didSet {
+            UserDefaults.standard.set(selectedModelID, forKey: "selectedModelID")
+            if oldValue != selectedModelID {
+                switchModel()
+            }
+        }
+    }
+
     // ── Context store (shared with UI) ─────────────────────────────────
     let contextStore = ContextStore()
 
@@ -36,19 +46,54 @@ final class ChatViewModel: ObservableObject {
 
     init(backend: LLMBackend = .mlx) {
         self.backend = backend
-        self.llmService = backend == .mlx ? LocalLLMServiceMLX() : LocalLLMServiceStub()
+
+        // Restore last-used model or use default
+        let savedID = UserDefaults.standard.string(forKey: "selectedModelID")
+        let modelID = savedID ?? ModelInfo.defaultModel.id
+        self.selectedModelID = modelID
+
+        if backend == .mlx {
+            let config = ModelInfo.find(id: modelID)?.configuration ?? ModelInfo.defaultModel.configuration
+            self.llmService = LocalLLMServiceMLX(configuration: config)
+        } else {
+            self.llmService = LocalLLMServiceStub()
+        }
     }
 
     // ── Switch back-end ────────────────────────────────────────────────
 
     private func switchService() {
         cancelGeneration()
-        llmService = backend == .mlx ? LocalLLMServiceMLX() : LocalLLMServiceStub()
+        if backend == .mlx {
+            let config = ModelInfo.find(id: selectedModelID)?.configuration ?? ModelInfo.defaultModel.configuration
+            llmService = LocalLLMServiceMLX(configuration: config)
+        } else {
+            llmService = LocalLLMServiceStub()
+        }
         messages = []
         status = "Switched to \(backend.rawValue)"
         isLoading = false
         downloadProgress = 0
         isDownloading = false
+    }
+
+    // ── Switch model ───────────────────────────────────────────────────
+
+    private func switchModel() {
+        cancelGeneration()
+
+        if backend == .mlx, let mlxService = llmService as? LocalLLMServiceMLX {
+            let config = ModelInfo.find(id: selectedModelID)?.configuration ?? ModelInfo.defaultModel.configuration
+            mlxService.switchModel(to: config)
+            messages = []
+            status = "Model changed — tap to load"
+            isLoading = false
+            downloadProgress = 0
+            isDownloading = false
+
+            // Auto-load the new model
+            Task { await loadModelIfNeeded() }
+        }
     }
 
     // ── Model loading ──────────────────────────────────────────────────
@@ -96,7 +141,6 @@ final class ChatViewModel: ObservableObject {
         let assistantID = UUID()
         messages.append(ChatMessage(id: assistantID, role: .assistant, text: ""))
 
-        // Build the composed system prompt from the context store
         let composedPrompt = contextStore.composedSystemPrompt
 
         do {
