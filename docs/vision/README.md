@@ -9,12 +9,12 @@
 
 | # | Document | Purpose |
 |---|---|---|
-| 1 | [Concept](VISION-01-concept.md) | High-level vision, guiding principles, and value proposition |
-| 2 | [Requirements](VISION-02-requirements.md) | Functional requirements, non-functional requirements, and constraints |
-| 3 | [Domain Model](VISION-03-domain-model.md) | Core entities, relationships, and data flows |
-| 4 | [Features & Use Cases](VISION-04-features-and-use-cases.md) | Feature catalog, user stories, and use case narratives |
-| 5 | [Architecture](VISION-05-architecture.md) | Target architecture, module boundaries, and integration patterns |
-| 6 | [Roadmap](VISION-06-roadmap.md) | Phased delivery plan with milestones and success criteria |
+| 1 | [Concept](01-concept.md) | High-level vision, guiding principles, and value proposition |
+| 2 | [Requirements](02-requirements.md) | Functional requirements, non-functional requirements, and constraints |
+| 3 | [Domain Model](03-domain-model.md) | Core entities, relationships, and data flows |
+| 4 | [Features & Use Cases](04-features-and-use-cases.md) | Feature catalog, user stories, and use case narratives |
+| 5 | [Architecture](05-architecture.md) | Target architecture, module boundaries, and integration patterns |
+| 6 | [Roadmap](06-roadmap.md) | Phased delivery plan with milestones and success criteria |
 
 ---
 

@@ -238,16 +238,16 @@ func registerDefaults() {
 
 ## Vision & Roadmap
 
-For the full product vision, architecture, and phased roadmap, see the **[Vision Documents](VISION.md)**:
+For the full product vision, architecture, and phased roadmap, see the **[Vision Documents](docs/vision/)**:
 
 | Document | Summary |
 |---|---|
-| [Concept](VISION-01-concept.md) | High-level vision, guiding principles, value proposition |
-| [Requirements](VISION-02-requirements.md) | Functional & non-functional requirements |
-| [Domain Model](VISION-03-domain-model.md) | Core entities and data flows |
-| [Features & Use Cases](VISION-04-features-and-use-cases.md) | Feature catalog and user stories |
-| [Architecture](VISION-05-architecture.md) | Target architecture and integration patterns |
-| [Roadmap](VISION-06-roadmap.md) | Phased delivery plan with milestones |
+| [Concept](docs/vision/01-concept.md) | High-level vision, guiding principles, value proposition |
+| [Requirements](docs/vision/02-requirements.md) | Functional & non-functional requirements |
+| [Domain Model](docs/vision/03-domain-model.md) | Core entities and data flows |
+| [Features & Use Cases](docs/vision/04-features-and-use-cases.md) | Feature catalog and user stories |
+| [Architecture](docs/vision/05-architecture.md) | Target architecture and integration patterns |
+| [Roadmap](docs/vision/06-roadmap.md) | Phased delivery plan with milestones |
 
 ### Next Steps
 ## Agent Instructions

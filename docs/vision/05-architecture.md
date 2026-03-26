@@ -270,4 +270,4 @@ let systemPrompt = contextStore.composedSystemPrompt
 
 ---
 
-*← [Features & Use Cases](VISION-04-features-and-use-cases.md) · Next: [Roadmap →](VISION-06-roadmap.md)*
+*← [Features & Use Cases](04-features-and-use-cases.md) · Next: [Roadmap →](06-roadmap.md)*

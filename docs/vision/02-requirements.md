@@ -147,4 +147,4 @@ Requirements are grouped by capability area and prioritized using **MoSCoW** (Mu
 
 ---
 
-*← [Concept](VISION-01-concept.md) · Next: [Domain Model →](VISION-03-domain-model.md)*
+*← [Concept](01-concept.md) · Next: [Domain Model →](03-domain-model.md)*

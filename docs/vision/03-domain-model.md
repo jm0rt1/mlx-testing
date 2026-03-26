@@ -319,4 +319,4 @@ ChatViewModel.send()
 
 ---
 
-*← [Requirements](VISION-02-requirements.md) · Next: [Features & Use Cases →](VISION-04-features-and-use-cases.md)*
+*← [Requirements](02-requirements.md) · Next: [Features & Use Cases →](04-features-and-use-cases.md)*

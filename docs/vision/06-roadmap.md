@@ -319,4 +319,4 @@ Phase 1 (Foundation) ──────────┐
 
 ---
 
-*← [Architecture](VISION-05-architecture.md) · Back to [Vision Index](VISION.md)*
+*← [Architecture](05-architecture.md) · Back to [Vision Index](README.md)*

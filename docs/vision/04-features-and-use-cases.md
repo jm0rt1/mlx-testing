@@ -1,6 +1,6 @@
 # 4 — Features & Use Cases
 
-This document catalogs the planned features, maps them to user stories, and provides detailed use case narratives. Features are organized into capability tiers that align with the [Roadmap](VISION-06-roadmap.md) phases.
+This document catalogs the planned features, maps them to user stories, and provides detailed use case narratives. Features are organized into capability tiers that align with the [Roadmap](06-roadmap.md) phases.
 
 ---
 
@@ -337,4 +337,4 @@ All new UI must include:
 
 ---
 
-*← [Domain Model](VISION-03-domain-model.md) · Next: [Architecture →](VISION-05-architecture.md)*
+*← [Domain Model](03-domain-model.md) · Next: [Architecture →](05-architecture.md)*
