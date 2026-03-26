@@ -188,17 +188,31 @@ MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** autom
 
 ---
 
-## Next Steps
+## Vision & Roadmap
+
+For the full product vision, architecture, and phased roadmap, see the **[Vision Documents](VISION.md)**:
+
+| Document | Summary |
+|---|---|
+| [Concept](VISION-01-concept.md) | High-level vision, guiding principles, value proposition |
+| [Requirements](VISION-02-requirements.md) | Functional & non-functional requirements |
+| [Domain Model](VISION-03-domain-model.md) | Core entities and data flows |
+| [Features & Use Cases](VISION-04-features-and-use-cases.md) | Feature catalog and user stories |
+| [Architecture](VISION-05-architecture.md) | Target architecture and integration patterns |
+| [Roadmap](VISION-06-roadmap.md) | Phased delivery plan with milestones |
+
+### Next Steps
 
 - [x] Add model picker UI (choose from model catalog at runtime)
 - [x] Context bubbles — inject skills, instructions, and memories into the system prompt
 - [x] System prompt editor with composed-prompt preview
 - [x] Persist context bubbles and system prompt to disk
+- [x] Agentic tool calling with approval flow
 - [ ] Add token-per-second metrics display
 - [ ] Persist conversation history to disk
 - [ ] Add VLM (vision) support via `MLXVLM`
 - [ ] Add embeddings / RAG pipeline via `MLXEmbedders`
-- [ ] Add tool calling support
+- [ ] Menu bar agent and global keyboard shortcut
 
 ---
 
