@@ -13,6 +13,10 @@ A native macOS SwiftUI chat application that runs large language models **locall
 - **Cancel generation** — stop the model mid-reply with ⌘.
 - **Download progress** — see model download percentage in the status bar
 - **Chat bubble UI** — polished conversation layout with scroll-to-bottom
+- **Model picker** — searchable toolbar popover to browse and select from 20+ models, with download status, disk/RAM sizes, and model notes
+- **Context bubbles** — toggleable context snippets (skills, instructions, memories, custom) automatically composed into the system prompt
+- **System prompt editor** — dedicated sheet for editing the base system prompt with a live composed-prompt preview
+- **Persistent settings** — context bubbles and base system prompt are auto-saved to `~/Library/Application Support/mlx-testing/`
 
 ---
 
@@ -77,12 +81,18 @@ The entitlements file (`mlx_testing.entitlements`) configures:
 ```
 mlx-testing/
 ├── mlx_testingApp.swift        # @main App entry point
-├── ContentView.swift           # Chat UI (status bar, bubbles, input bar, toolbar)
-├── ChatMessage.swift           # Message model (id, role, text, date)
-├── ChatViewModel.swift         # ObservableObject driving the UI
+├── ContentView.swift           # Main chat UI with sidebar, status bar, message bubbles, input bar, toolbar
+├── ChatMessage.swift           # Message data model (id, role, text, date)
+├── ChatViewModel.swift         # ObservableObject driving the UI and managing chat state
 ├── LocalLLMService.swift       # LLMService protocol + two implementations:
 │   ├── LocalLLMServiceMLX        — real MLX inference
 │   └── LocalLLMServiceStub       — simulated streaming (no model needed)
+├── ModelInfo.swift             # Catalog of 20+ available LLMs with download status and memory requirements
+├── ModelPickerView.swift       # Toolbar popover for selecting models with search, download status, and size info
+├── ContextBubble.swift         # Data model for toggleable context snippets (skill, instruction, memory, custom)
+├── ContextBubbleEditor.swift   # Sidebar UI for managing context bubbles (add, edit, delete, toggle)
+├── ContextStore.swift          # Persists context bubbles and base system prompt to disk with auto-save
+├── SystemPromptEditor.swift    # Sheet UI for editing the base system prompt and previewing the composed prompt
 ├── mlx_testing.entitlements    # Sandbox + network + memory entitlements
 └── Assets.xcassets/
 ```
@@ -155,10 +165,12 @@ var generateParameters = GenerateParameters(maxTokens: 2048, temperature: 0.6)
 
 1. **App launches** → `ContentView` calls `vm.loadModelIfNeeded()`
 2. **Model loading** → `LocalLLMServiceMLX.load()` uses `LLMModelFactory.shared.loadContainer()` to download weights from Hugging Face Hub and load them via MLX
-3. **Chat session** → A `ChatSession` is created with the loaded `ModelContainer`, system prompt, and generation parameters
-4. **User sends message** → `ChatViewModel.send()` appends a user message, creates a placeholder assistant message, then calls `generateReplyStreaming()`
-5. **Streaming** → `ChatSession.streamResponse(to:)` returns an `AsyncThrowingStream<String, Error>` — each chunk is appended to the assistant message in real time
-6. **Cancellation** → Cancelling the `Task` terminates the stream; MLX cleans up
+3. **System prompt composition** → `ContextStore` combines the base system prompt with all enabled context bubbles into a single composed prompt
+4. **Chat session** → A `ChatSession` is created with the loaded `ModelContainer`, composed system prompt, and generation parameters
+5. **User sends message** → `ChatViewModel.send()` appends a user message, creates a placeholder assistant message, then calls `generateReplyStreaming()`
+6. **Streaming** → `ChatSession.streamResponse(to:)` returns an `AsyncThrowingStream<String, Error>` — each chunk is appended to the assistant message in real time
+7. **Cancellation** → Cancelling the `Task` terminates the stream; MLX cleans up
+8. **Model selection** → `ModelPickerView` lets the user choose a different model from the catalog; selecting a new model triggers a reload
 
 MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** automatically — no Metal shader code needed.
 
@@ -178,8 +190,11 @@ MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** autom
 
 ## Next Steps
 
+- [x] Add model picker UI (choose from model catalog at runtime)
+- [x] Context bubbles — inject skills, instructions, and memories into the system prompt
+- [x] System prompt editor with composed-prompt preview
+- [x] Persist context bubbles and system prompt to disk
 - [ ] Add token-per-second metrics display
-- [ ] Add model picker UI (choose from `LLMRegistry` at runtime)
 - [ ] Persist conversation history to disk
 - [ ] Add VLM (vision) support via `MLXVLM`
 - [ ] Add embeddings / RAG pipeline via `MLXEmbedders`
