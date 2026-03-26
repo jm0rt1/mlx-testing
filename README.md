@@ -82,18 +82,28 @@ The entitlements file (`mlx_testing.entitlements`) configures:
 mlx-testing/
 ├── mlx_testingApp.swift        # @main App entry point
 ├── ContentView.swift           # Main chat UI with sidebar, status bar, message bubbles, input bar, toolbar
-├── ChatMessage.swift           # Message data model (id, role, text, date)
-├── ChatViewModel.swift         # ObservableObject driving the UI and managing chat state
+├── ChatMessage.swift           # Message data model (id, role, text, date, tool info)
+├── ChatViewModel.swift         # ObservableObject driving the UI and managing chat state + agentic loop
 ├── LocalLLMService.swift       # LLMService protocol + two implementations:
 │   ├── LocalLLMServiceMLX        — real MLX inference
 │   └── LocalLLMServiceStub       — simulated streaming (no model needed)
-├── ModelInfo.swift             # Catalog of 20+ available LLMs with download status and memory requirements
+├── ModelInfo.swift             # Dynamic model entry populated from Hugging Face API
+├── ModelCatalogService.swift   # Fetches and caches MLX-compatible models from the HF API
 ├── ModelPickerView.swift       # Toolbar popover for selecting models with search, download status, and size info
+├── MarkdownView.swift          # Lightweight Markdown renderer for chat bubbles
 ├── ContextBubble.swift         # Data model for toggleable context snippets (skill, instruction, memory, custom)
 ├── ContextBubbleEditor.swift   # Sidebar UI for managing context bubbles (add, edit, delete, toggle)
 ├── ContextStore.swift          # Persists context bubbles and base system prompt to disk with auto-save
 ├── SystemPromptEditor.swift    # Sheet UI for editing the base system prompt and previewing the composed prompt
-├── mlx_testing.entitlements    # Sandbox + network + memory entitlements
+├── AgentTools/                 # Extensible tool system for LLM-invoked actions
+│   ├── AgentTool.swift           — AgentTool protocol, ToolParameter, ToolCall, ToolResult types
+│   ├── ToolRegistry.swift        — Central registry, schema generation, approval persistence
+│   ├── ToolExecutor.swift        — Parses tool_call JSON from LLM output, validates, executes
+│   ├── FileSystemTool.swift      — Read/write/list/search files
+│   ├── ShellCommandTool.swift    — Execute shell commands with timeout
+│   ├── ClipboardTool.swift       — Read/write system clipboard
+│   └── AppLauncherTool.swift     — Open apps, URLs, files; list running apps
+├── mlx_testing.entitlements    # Sandbox + network + memory + file access entitlements
 └── Assets.xcassets/
 ```
 
@@ -185,6 +195,19 @@ MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** autom
 | App uses too much memory | Try a smaller model (1B–3B) or reduce `maxTokens` |
 | Build error about missing modules | Ensure both SPM packages resolved (File → Packages → Resolve Package Versions) |
 | Sandbox error on download | Confirm `com.apple.security.network.client` is `true` in entitlements |
+
+---
+
+## Agent Instructions
+
+The repository includes Copilot/agent instructions to help AI coding assistants work effectively:
+
+| File | Purpose |
+|---|---|
+| `.github/copilot-instructions.md` | Global instructions: architecture overview, Swift conventions, patterns, entitlements, tool system, and PR checklist |
+| `.github/pull_request_template.md` | PR template with checklist covering code quality and documentation updates |
+
+These files are automatically picked up by GitHub Copilot and other AI agents when working in this repository.
 
 ---
 
