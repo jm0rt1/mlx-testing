@@ -236,6 +236,20 @@ func registerDefaults() {
 
 ---
 
+## Vision & Roadmap
+
+For the full product vision, architecture, and phased roadmap, see the **[Vision Documents](docs/vision/)**:
+
+| Document | Summary |
+|---|---|
+| [Concept](docs/vision/01-concept.md) | High-level vision, guiding principles, value proposition |
+| [Requirements](docs/vision/02-requirements.md) | Functional & non-functional requirements |
+| [Domain Model](docs/vision/03-domain-model.md) | Core entities and data flows |
+| [Features & Use Cases](docs/vision/04-features-and-use-cases.md) | Feature catalog and user stories |
+| [Architecture](docs/vision/05-architecture.md) | Target architecture and integration patterns |
+| [Roadmap](docs/vision/06-roadmap.md) | Phased delivery plan with milestones |
+
+### Next Steps
 ## Agent Instructions
 
 The repository includes Copilot/agent instructions to help AI coding assistants work effectively:
@@ -255,6 +269,7 @@ These files are automatically picked up by GitHub Copilot and other AI agents wh
 - [x] Context bubbles — inject skills, instructions, and memories into the system prompt
 - [x] System prompt editor with composed-prompt preview
 - [x] Persist context bubbles and system prompt to disk
+- [x] Agentic tool calling with approval flow
 - [x] Dynamic model catalog fetched from Hugging Face API
 - [x] Markdown rendering for assistant replies (code blocks, headings, lists)
 - [x] Agentic tool system with file, shell, clipboard, and app launcher tools
@@ -263,6 +278,7 @@ These files are automatically picked up by GitHub Copilot and other AI agents wh
 - [ ] Persist conversation history to disk
 - [ ] Add VLM (vision) support via `MLXVLM`
 - [ ] Add embeddings / RAG pipeline via `MLXEmbedders`
+- [ ] Menu bar agent and global keyboard shortcut
 
 ---
 
