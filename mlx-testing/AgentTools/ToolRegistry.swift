@@ -1,0 +1,112 @@
+import Combine
+import Foundation
+
+// MARK: - Tool Registry
+
+/// Central registry of all available tools. Tools register themselves here,
+/// and the system prompt generator + executor query this registry.
+///
+/// **To add a new tool:**
+/// ```swift
+/// ToolRegistry.shared.register(MyNewTool())
+/// ```
+@MainActor
+final class ToolRegistry: ObservableObject {
+
+    static let shared = ToolRegistry()
+
+    @Published private(set) var tools: [String: any AgentTool] = [:]
+
+    /// Tools the user has permanently approved (by name).
+    @Published var alwaysApproved: Set<String> = [] {
+        didSet { persistApprovals() }
+    }
+
+    private let approvalsKey = "tool_always_approved"
+
+    private init() {
+        loadApprovals()
+    }
+
+    // MARK: - Registration
+
+    func register(_ tool: any AgentTool) {
+        tools[tool.name] = tool
+    }
+
+    func unregister(_ name: String) {
+        tools.removeValue(forKey: name)
+    }
+
+    func tool(named name: String) -> (any AgentTool)? {
+        tools[name]
+    }
+
+    /// Register all built-in tools. Call once at app startup.
+    func registerDefaults() {
+        register(FileSystemTool())
+        register(ShellCommandTool())
+        register(ClipboardTool())
+        register(AppLauncherTool())
+    }
+
+    // MARK: - Schema Generation
+
+    /// Generates the tool description block to inject into the system prompt.
+    func toolSchemaPrompt() -> String {
+        guard !tools.isEmpty else { return "" }
+
+        var lines: [String] = []
+        lines.append("[Available Tools]")
+        lines.append("You can call tools by including a JSON block in your response with this exact format:")
+        lines.append("```tool_call")
+        lines.append(#"{"tool": "tool_name", "arguments": {"param1": "value1"}}"#)
+        lines.append("```")
+        lines.append("")
+        lines.append("IMPORTANT: Only use ONE tool_call block per response. Wait for the result before calling another tool.")
+        lines.append("After receiving a tool result, analyze it and either respond to the user or make another tool call.")
+        lines.append("")
+
+        let sortedTools = tools.values.sorted { $0.name < $1.name }
+        for tool in sortedTools {
+            lines.append("### \(tool.name)")
+            lines.append(tool.toolDescription)
+            lines.append("Risk: \(tool.riskLevel.rawValue)")
+            if !tool.parameters.isEmpty {
+                lines.append("Parameters:")
+                for param in tool.parameters {
+                    let req = param.required ? "(required)" : "(optional)"
+                    var line = "  - \(param.name) [\(param.type.rawValue)] \(req): \(param.description)"
+                    if let def = param.defaultValue {
+                        line += " (default: \(def))"
+                    }
+                    if let enums = param.enumValues {
+                        line += " (values: \(enums.joined(separator: ", ")))"
+                    }
+                    lines.append(line)
+                }
+            }
+            lines.append("")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Approval Persistence
+
+    private func persistApprovals() {
+        UserDefaults.standard.set(Array(alwaysApproved), forKey: approvalsKey)
+    }
+
+    private func loadApprovals() {
+        if let saved = UserDefaults.standard.stringArray(forKey: approvalsKey) {
+            alwaysApproved = Set(saved)
+        }
+    }
+
+    func needsApproval(for toolName: String) -> Bool {
+        guard let tool = tools[toolName] else { return true }
+        if alwaysApproved.contains(toolName) { return false }
+        return tool.requiresApproval
+    }
+}

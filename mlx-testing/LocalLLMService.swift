@@ -21,41 +21,40 @@ protocol LLMService: AnyObject {
 
 // MARK: - MLX-backed Implementation
 
-/// Real MLX Swift LM service using `ModelContainer` and `ChatSession`.
+/// Real MLX Swift LM service that creates a ModelConfiguration dynamically
+/// from a Hugging Face model ID string — no hardcoded catalog needed.
 ///
-/// **Model caching**: MLX downloads weights to `~/Library/Caches/` on first use.
-/// Subsequent launches reuse the cached files — no re-download needed.
+/// **Model caching**: MLX downloads weights to the app's Caches directory on first use.
+/// Subsequent launches reuse the cached files automatically.
 @MainActor
 final class LocalLLMServiceMLX: LLMService {
 
-    // ── Model configuration (set by ChatViewModel) ─────────────────────
-    private(set) var modelConfiguration: ModelConfiguration
+    // MARK: - State
 
-    /// Generation parameters (temperature, max tokens, etc.).
+    /// The HF model ID, e.g. "mlx-community/Qwen3-8B-4bit"
+    private(set) var modelID: String
+
     var generateParameters: GenerateParameters = GenerateParameters(
         maxTokens: 2048, temperature: 0.6
     )
 
-    // ── Observable state ───────────────────────────────────────────────
     private(set) var isLoaded = false
     private(set) var downloadProgress: Double = 0.0
     private(set) var statusMessage: String = "Idle"
 
-    // ── Internal state ─────────────────────────────────────────────────
     private var modelContainer: ModelContainer?
     private var generationTask: Task<Void, Error>?
-
-    /// Track the last system prompt used so we can rebuild the session if it changes.
     private var currentSystemPrompt: String?
     private var chatSession: ChatSession?
 
-    // ── Init ───────────────────────────────────────────────────────────
+    // MARK: - Init
 
-    init(configuration: ModelConfiguration = ModelInfo.defaultModel.configuration) {
-        self.modelConfiguration = configuration
+    /// Initialize with a HuggingFace model ID. The ModelConfiguration is created dynamically.
+    init(modelID: String = ModelCatalogService.defaultModelID) {
+        self.modelID = modelID
     }
 
-    // ── Loading ────────────────────────────────────────────────────────
+    // MARK: - Loading
 
     func load() async throws {
         guard !isLoaded else { return }
@@ -65,8 +64,11 @@ final class LocalLLMServiceMLX: LLMService {
 
         MLX.GPU.set(cacheLimit: 20 * 1024 * 1024)
 
+        // Create ModelConfiguration dynamically from the HF repo ID
+        let configuration = ModelConfiguration(id: modelID)
+
         let container = try await LLMModelFactory.shared.loadContainer(
-            configuration: modelConfiguration
+            configuration: configuration
         ) { [weak self] progress in
             Task { @MainActor in
                 self?.downloadProgress = progress.fractionCompleted
@@ -81,21 +83,21 @@ final class LocalLLMServiceMLX: LLMService {
         statusMessage = "Model loaded"
     }
 
-    // ── Model switching ────────────────────────────────────────────────
+    // MARK: - Model switching
 
     /// Tear down the current model and prepare to load a new one.
-    func switchModel(to configuration: ModelConfiguration) {
+    func switchModel(to newModelID: String) {
         cancelGeneration()
         modelContainer = nil
         chatSession = nil
         currentSystemPrompt = nil
         isLoaded = false
         downloadProgress = 0
-        modelConfiguration = configuration
-        statusMessage = "Ready to load new model"
+        modelID = newModelID
+        statusMessage = "Ready to load \(newModelID.components(separatedBy: "/").last ?? newModelID)"
     }
 
-    // ── Session management ─────────────────────────────────────────────
+    // MARK: - Session management
 
     private func session(for systemPrompt: String) -> ChatSession? {
         guard let container = modelContainer else { return nil }
@@ -114,7 +116,7 @@ final class LocalLLMServiceMLX: LLMService {
         return session
     }
 
-    // ── Generation ─────────────────────────────────────────────────────
+    // MARK: - Generation
 
     func generateReplyStreaming(
         from messages: [ChatMessage],
@@ -145,7 +147,7 @@ final class LocalLLMServiceMLX: LLMService {
         statusMessage = "Done"
     }
 
-    // ── Cancellation ───────────────────────────────────────────────────
+    // MARK: - Cancellation
 
     func cancelGeneration() {
         generationTask?.cancel()
@@ -156,7 +158,7 @@ final class LocalLLMServiceMLX: LLMService {
 
 // MARK: - Stub Implementation (no MLX required)
 
-/// Safe stub that simulates model loading and streaming – useful for UI development.
+/// Safe stub that simulates model loading and streaming — useful for UI development.
 final class LocalLLMServiceStub: LLMService {
 
     private(set) var isLoaded = false
@@ -184,7 +186,6 @@ final class LocalLLMServiceStub: LLMService {
         try await load()
         statusMessage = "Generating (stub)…"
 
-        // Echo back what context the model "sees" so you can verify the composed prompt
         let reply = "**[Stub]** System prompt has \(systemPrompt.count) chars. "
             + "Received \(messages.filter { $0.role == .user }.count) user message(s). "
             + "This is a simulated streaming reply."
