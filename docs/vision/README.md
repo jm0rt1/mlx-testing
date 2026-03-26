@@ -45,3 +45,17 @@ The application today is a native macOS SwiftUI chat interface that:
 - Persists context and settings to disk
 
 The vision documents describe the evolution from this foundation into something significantly more capable.
+
+---
+
+## Related Documentation
+
+These vision documents are part of a larger documentation structure:
+
+| Section | Purpose |
+|---|---|
+| **[Technical Designs](../design/)** | Implementation-level specs for upcoming milestones |
+| **[Developer Guides](../guides/)** | How-to guides for development and contribution |
+| **[Decision Records](../decisions/)** | Architectural decisions and their rationale |
+
+See the [documentation index](../README.md) for the complete map.

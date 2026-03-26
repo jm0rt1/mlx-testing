@@ -202,22 +202,118 @@ The LLM wraps calls in a fenced ` ```tool_call ` block:
 
 ## Documentation
 
-### When to update the README
+### Documentation Structure
 
-- **New Swift file added** → update the Project Structure tree.
-- **New feature** → add to the Features list and describe in the relevant section.
-- **New dependency** → add to the Package Dependencies table.
-- **New entitlement** → add to the Entitlements table with the "why" column.
-- **New tool added** → mention in Features list and Project Structure.
+The project has a comprehensive documentation structure under `docs/`:
+
+```
+docs/
+├── README.md                    # Documentation index (start here)
+├── vision/                      # Product vision and strategy
+│   ├── 01-concept.md            #   What and why
+│   ├── 02-requirements.md       #   FR/NFR with MoSCoW priority
+│   ├── 03-domain-model.md       #   Entities, relationships, data flows
+│   ├── 04-features-and-use-cases.md  #   Feature catalog and user stories
+│   ├── 05-architecture.md       #   Target architecture and module boundaries
+│   └── 06-roadmap.md            #   Phased delivery plan
+├── design/                      # Technical design documents (TDDs)
+│   ├── phase2-conversation-persistence.md
+│   ├── phase2-generation-metrics.md
+│   └── phase2-generation-parameters.md
+├── guides/                      # Developer and contributor guides
+│   ├── development-setup.md     #   Environment setup, build, run
+│   ├── adding-tools.md          #   Step-by-step tool creation
+│   └── contributing.md          #   Contribution workflow and conventions
+└── decisions/                   # Architectural Decision Records (ADRs)
+    ├── 001-mlx-swift-for-inference.md
+    ├── 002-file-based-persistence.md
+    └── 003-protocol-oriented-services.md
+```
+
+### When to update documentation
+
+- **New Swift file added** → update the README project structure tree
+- **New feature** → add to the README features list and describe in the relevant section
+- **New dependency** → add to the README Package Dependencies table
+- **New entitlement** → add to the README Entitlements table and the entitlements section in this file
+- **New tool added** → mention in README Features list and Project Structure
+- **New milestone planned** → create a technical design document in `docs/design/`
+- **Significant design decision** → create an ADR in `docs/decisions/`
+- **Architecture change** → update `docs/vision/05-architecture.md` and this file
+- **New development workflow** → update or add a guide in `docs/guides/`
 
 ### Formatting conventions
 
-- Tables use `|---|---|` alignment rows.
-- Code blocks use triple backticks with language tags (`swift`, `bash`, `json`).
-- The project structure uses a tree-style `├──` / `└──` diagram.
-- Keyboard shortcuts: `⌘`, `⌥`, `⇧` (symbols, not spelled out).
-- Bullet lists use `-` (not `*`).
-- Section separators use `---`.
+- Tables use `|---|---|` alignment rows
+- Code blocks use triple backticks with language tags (`swift`, `bash`, `json`)
+- The project structure uses a tree-style `├──` / `└──` diagram
+- Keyboard shortcuts: `⌘`, `⌥`, `⇧` (symbols, not spelled out)
+- Bullet lists use `-` (not `*`)
+- Section separators use `---`
+- Each document includes navigation links to previous/next documents where applicable
+
+### Design documents
+
+Before implementing a new milestone, check `docs/design/` for a technical design document (TDD). TDDs specify:
+- Data model changes (new structs, modified properties)
+- API surface changes (new methods on existing types)
+- Storage approach (file paths, UserDefaults keys)
+- UI changes (new views, modified existing views)
+- Implementation plan (ordered steps)
+
+If no TDD exists for a milestone, create one using the template in `docs/design/README.md`.
+
+### Architectural Decision Records
+
+When making significant design choices (new dependency, new pattern, architectural change), document the decision in `docs/decisions/` using the ADR template. Include context, decision, rationale, alternatives considered, and consequences.
+
+---
+
+## Current Project State & Future Task Context
+
+### Phase 1 (Foundation) — Complete ✅
+
+The core chat application is fully functional:
+- Local LLM inference via MLX with streaming and cancellation
+- Dynamic model catalog from HuggingFace API with runtime model switching
+- Context bubbles and system prompt composition
+- Agentic tool system with approval flow (file system, shell, clipboard, app launcher)
+- Persistent settings (context, system prompt, model selection, tool approvals)
+
+### Phase 2 (Continuity) — Next Priority
+
+The immediate development priorities are documented in `docs/design/`:
+
+1. **Conversation Persistence** (Milestone 2.1) — See `docs/design/phase2-conversation-persistence.md`
+   - New `Conversation` struct and `ConversationManager` class
+   - JSON storage in `~/Library/Application Support/mlx-testing/conversations/`
+   - Auto-save with Combine debounce (same pattern as `ContextStore`)
+   - Integration with `ChatViewModel` via bridged `messages` property
+
+2. **Performance Metrics** (Milestone 2.3) — See `docs/design/phase2-generation-metrics.md`
+   - New `GenerationMetrics` struct on `ChatMessage`
+   - Live tokens-per-second counter in status bar
+   - Post-generation metrics footer on assistant messages
+
+3. **Generation Parameters** (Milestone 2.4) — See `docs/design/phase2-generation-parameters.md`
+   - New `GenerationSettings` struct with temperature, top-p, max tokens
+   - Settings popover in toolbar
+   - UserDefaults persistence
+
+### Phase 3 (Multimodal) and Phase 4 (OS Companion)
+
+Longer-term milestones are described in `docs/vision/06-roadmap.md`:
+- VLM support via MLXVLM (Milestone 3.1)
+- RAG pipeline with local embeddings via MLXEmbedders (Milestones 3.3–3.4)
+- Menu bar agent (Milestone 4.1)
+- macOS Services and Shortcuts integration (Milestones 4.3–4.4)
+
+### Key Architectural Decisions
+
+These decisions inform all future development (details in `docs/decisions/`):
+- **ADR-001:** MLX Swift is the sole inference backend — no llama.cpp, Core ML, or ONNX
+- **ADR-002:** File-based persistence (JSON) over Core Data/SQLite — simple, human-readable, no migrations
+- **ADR-003:** Protocol-oriented services — all subsystems accessed via protocols for testability and extensibility
 
 ---
 
@@ -233,3 +329,5 @@ When submitting changes, verify:
 - [ ] No hardcoded model IDs outside `ModelCatalogService.defaultModelID`.
 - [ ] All async work supports cancellation via `Task.checkCancellation()`.
 - [ ] Large tool outputs are truncated with a character limit.
+- [ ] Technical design document consulted (if implementing a documented milestone).
+- [ ] Documentation updated for any architectural or structural changes.

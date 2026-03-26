@@ -249,7 +249,20 @@ For the full product vision, architecture, and phased roadmap, see the **[Vision
 | [Architecture](docs/vision/05-architecture.md) | Target architecture and integration patterns |
 | [Roadmap](docs/vision/06-roadmap.md) | Phased delivery plan with milestones |
 
-### Next Steps
+### Implementation & Design
+
+| Document | Summary |
+|---|---|
+| [Technical Designs](docs/design/) | Implementation-level specs for Phase 2 milestones |
+| [Architectural Decisions](docs/decisions/) | Key design decisions and their rationale (ADRs) |
+| [Development Setup](docs/guides/development-setup.md) | Environment setup, building, and running |
+| [Contributing Guide](docs/guides/contributing.md) | Contribution workflow, conventions, and PR process |
+| [Adding Tools Guide](docs/guides/adding-tools.md) | Step-by-step guide to creating new agent tools |
+
+See the **[Documentation Index](docs/README.md)** for the complete documentation map.
+
+---
+
 ## Agent Instructions
 
 The repository includes Copilot/agent instructions to help AI coding assistants work effectively:
