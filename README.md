@@ -236,6 +236,19 @@ func registerDefaults() {
 
 ---
 
+## Agent Instructions
+
+The repository includes Copilot/agent instructions to help AI coding assistants work effectively:
+
+| File | Purpose |
+|---|---|
+| `.github/copilot-instructions.md` | Global instructions: architecture overview, Swift conventions, patterns, entitlements, tool system, and PR checklist |
+| `.github/pull_request_template.md` | PR template with checklist covering code quality and documentation updates |
+
+These files are automatically picked up by GitHub Copilot and other AI agents when working in this repository.
+
+---
+
 ## Next Steps
 
 - [x] Add model picker UI (choose from model catalog at runtime)
