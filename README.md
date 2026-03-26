@@ -13,6 +13,13 @@ A native macOS SwiftUI chat application that runs large language models **locall
 - **Cancel generation** — stop the model mid-reply with ⌘.
 - **Download progress** — see model download percentage in the status bar
 - **Chat bubble UI** — polished conversation layout with scroll-to-bottom
+- **Model picker** — searchable toolbar popover to browse and select from 20+ models, with download status, disk/RAM sizes, and model notes
+- **Dynamic model catalog** — fetches available MLX models from the Hugging Face API, with disk caching and periodic refresh
+- **Context bubbles** — toggleable context snippets (skills, instructions, memories, custom) automatically composed into the system prompt
+- **System prompt editor** — dedicated sheet for editing the base system prompt with a live composed-prompt preview
+- **Agentic tool system** — LLM can invoke local tools (file system, shell, clipboard, app launcher) with user approval flow
+- **Markdown rendering** — assistant replies render fenced code blocks, headings, lists, bold/italic, and inline code
+- **Persistent settings** — context bubbles, system prompt, model catalog, and tool approvals are auto-saved to `~/Library/Application Support/mlx-testing/`
 
 ---
 
@@ -41,7 +48,7 @@ In Xcode → **mlx-testing** target → **Signing & Capabilities** → set your 
 
 ### 3. Build & Run
 
-Press **⌘R**. On first launch the app will download the default model (~2–3 GB for Qwen3-4B-4bit) from Hugging Face. Subsequent launches use the cached weights.
+Press **⌘R**. On first launch the app will fetch the model catalog from Hugging Face and download the default model (~5 GB for Qwen3-8B-4bit). Subsequent launches use the cached weights.
 
 > **Tip:** Run outside the debugger (⌘⌥R → uncheck "Debug Executable") for noticeably faster inference.
 
@@ -67,8 +74,12 @@ The entitlements file (`mlx_testing.entitlements`) configures:
 | Entitlement | Why |
 |---|---|
 | `com.apple.security.app-sandbox` | Required for sandboxed macOS apps |
-| `com.apple.security.network.client` | Model weights are downloaded from Hugging Face Hub |
+| `com.apple.security.network.client` | Model weights and catalog are downloaded from Hugging Face Hub |
 | `com.apple.developer.kernel.increased-memory-limit` | LLMs need significant memory; this requests more from the OS |
+| `com.apple.security.files.user-selected.read-write` | File system tool: read/write user-selected files |
+| `com.apple.security.files.downloads.read-write` | File system tool: access the Downloads folder |
+| `com.apple.security.temporary-exception.files.home-relative-path.read-write` | File system tool: read/write files relative to home directory |
+| `com.apple.security.automation.apple-events` | App launcher tool: open applications via Apple Events |
 
 ---
 
@@ -77,13 +88,29 @@ The entitlements file (`mlx_testing.entitlements`) configures:
 ```
 mlx-testing/
 ├── mlx_testingApp.swift        # @main App entry point
-├── ContentView.swift           # Chat UI (status bar, bubbles, input bar, toolbar)
-├── ChatMessage.swift           # Message model (id, role, text, date)
-├── ChatViewModel.swift         # ObservableObject driving the UI
+├── ContentView.swift           # Main chat UI with sidebar, status bar, message bubbles, input bar, toolbar
+├── ChatMessage.swift           # Message data model (id, role, text, date, tool call/result info)
+├── ChatViewModel.swift         # ObservableObject driving the UI, chat state, and agentic tool loop
 ├── LocalLLMService.swift       # LLMService protocol + two implementations:
 │   ├── LocalLLMServiceMLX        — real MLX inference
 │   └── LocalLLMServiceStub       — simulated streaming (no model needed)
-├── mlx_testing.entitlements    # Sandbox + network + memory entitlements
+├── ModelInfo.swift             # Dynamic model entry (Codable) with HF metadata, download status, and RAM estimates
+├── ModelCatalogService.swift   # Fetches MLX-compatible models from HF API, caches catalog to disk
+├── ModelPickerView.swift       # Toolbar popover for selecting models with search, download status, and size info
+├── MarkdownView.swift          # Lightweight Markdown renderer (code blocks, headings, lists, inline formatting)
+├── ContextBubble.swift         # Data model for toggleable context snippets (skill, instruction, memory, custom)
+├── ContextBubbleEditor.swift   # Sidebar UI for managing context bubbles (add, edit, delete, toggle)
+├── ContextStore.swift          # Persists context bubbles and base system prompt to disk with auto-save
+├── SystemPromptEditor.swift    # Sheet UI for editing the base system prompt and previewing the composed prompt
+├── AgentTools/                 # Agentic tool system
+│   ├── AgentTool.swift           — Tool protocol, parameter/argument types, ToolCall, ToolResult, risk levels
+│   ├── ToolRegistry.swift        — Central registry of available tools with schema generation
+│   ├── ToolExecutor.swift        — Parses tool calls from LLM output and executes them
+│   ├── FileSystemTool.swift      — Read, write, list, search files (medium risk)
+│   ├── ShellCommandTool.swift    — Execute shell commands via /bin/bash (high risk)
+│   ├── ClipboardTool.swift       — Read/write system clipboard (low risk)
+│   └── AppLauncherTool.swift     — Open apps, URLs, files, list running apps (medium risk)
+├── mlx_testing.entitlements    # Sandbox + network + memory + file access + automation entitlements
 └── Assets.xcassets/
 ```
 
@@ -113,34 +140,23 @@ init(backend: LLMBackend = .mlx)    // MLX by default (current)
 
 ## Changing the Model
 
-In `LocalLLMService.swift` → `LocalLLMServiceMLX`, change:
+### At runtime (recommended)
+
+Use the **Model Picker** in the toolbar to browse, search, and select from all available MLX-community models. The catalog is fetched from the Hugging Face API and cached locally. Models can be filtered by download status, RAM fit, and sorted by downloads, size, name, or family.
+
+### At build time
+
+In `ModelCatalogService.swift`, change the default model ID:
 
 ```swift
-var modelConfiguration: ModelConfiguration = LLMRegistry.qwen3_4b_4bit
+static let defaultModelID = "mlx-community/Qwen3-8B-4bit"
 ```
 
-### Recommended models for 24 GB RAM
-
-| Model | Registry constant | ~Memory | Notes |
-|---|---|---|---|
-| Gemma 3 1B QAT 4-bit | `LLMRegistry.gemma3_1B_qat_4bit` | ~0.7 GB | Ultra-fast, great for testing |
-| Qwen3 4B 4-bit | `LLMRegistry.qwen3_4b_4bit` | ~2.5 GB | Fast, good quality |
-| Llama 3.2 3B 4-bit | `LLMRegistry.llama3_2_3B_4bit` | ~2 GB | Compact |
-| SmolLM3 3B 4-bit | `LLMRegistry.smollm3_3b_4bit` | ~2 GB | Compact |
-| **Qwen3 8B 4-bit** (default) | `LLMRegistry.qwen3_8b_4bit` | ~5 GB | Best quality/speed balance for 24 GB |
-| Llama 3.1 8B 4-bit | `LLMRegistry.llama3_1_8B_4bit` | ~5 GB | Strong all-around |
-| Gemma 2 9B 4-bit | `LLMRegistry.gemma_2_9b_it_4bit` | ~6 GB | Great quality |
-| GLM-4 9B 4-bit | `LLMRegistry.glm4_9b_4bit` | ~6 GB | Tool calling support |
-| DeepSeek R1 7B 4-bit | `LLMRegistry.deepSeekR1_7B_4bit` | ~5 GB | Reasoning model |
-| Qwen3 MoE 30B-A3B 4-bit | `LLMRegistry.qwen3MoE_30b_a3b_4bit` | ~17 GB | 30B total, only 3B active — tight fit, best quality |
-
-You can also load **any** Hugging Face model with an MLX-compatible architecture:
-
-```swift
-var modelConfiguration = ModelConfiguration(id: "mlx-community/YOUR-MODEL-ID")
-```
+You can use **any** Hugging Face model with an MLX-compatible architecture — the `LocalLLMServiceMLX` creates a `ModelConfiguration` dynamically from the repo ID.
 
 ### Generation parameters
+
+In `LocalLLMService.swift` → `LocalLLMServiceMLX`:
 
 ```swift
 var generateParameters = GenerateParameters(maxTokens: 2048, temperature: 0.6)
@@ -153,14 +169,58 @@ var generateParameters = GenerateParameters(maxTokens: 2048, temperature: 0.6)
 
 ## How It Works
 
-1. **App launches** → `ContentView` calls `vm.loadModelIfNeeded()`
-2. **Model loading** → `LocalLLMServiceMLX.load()` uses `LLMModelFactory.shared.loadContainer()` to download weights from Hugging Face Hub and load them via MLX
-3. **Chat session** → A `ChatSession` is created with the loaded `ModelContainer`, system prompt, and generation parameters
-4. **User sends message** → `ChatViewModel.send()` appends a user message, creates a placeholder assistant message, then calls `generateReplyStreaming()`
-5. **Streaming** → `ChatSession.streamResponse(to:)` returns an `AsyncThrowingStream<String, Error>` — each chunk is appended to the assistant message in real time
-6. **Cancellation** → Cancelling the `Task` terminates the stream; MLX cleans up
+1. **App launches** → `ContentView` loads the model catalog and calls `vm.loadModelIfNeeded()`
+2. **Catalog loading** → `ModelCatalogService` loads cached models from disk, then refreshes from the Hugging Face API if stale (>1 hour)
+3. **Model loading** → `LocalLLMServiceMLX.load()` uses `LLMModelFactory.shared.loadContainer()` to download weights from Hugging Face Hub and load them via MLX
+4. **System prompt composition** → `ContextStore` combines the base system prompt with all enabled context bubbles, and the tool registry appends available tool schemas
+5. **Chat session** → A `ChatSession` is created with the loaded `ModelContainer`, composed system prompt, and generation parameters
+6. **User sends message** → `ChatViewModel.send()` appends a user message, creates a placeholder assistant message, then enters the agentic loop
+7. **Agentic loop** → `agenticLoop()` generates a reply, checks for `tool_call` JSON blocks, requests user approval, executes the tool, feeds the result back, and repeats (up to 10 iterations)
+8. **Streaming** → `ChatSession.streamResponse(to:)` returns an `AsyncThrowingStream<String, Error>` — each chunk is appended to the assistant message in real time
+9. **Response sanitization** → `<think>` and `<reasoning>` tags from chain-of-thought models are stripped from the output
+10. **Cancellation** → Cancelling the `Task` terminates the stream; MLX cleans up
+11. **Model selection** → `ModelPickerView` lets the user choose a different model from the dynamic catalog; selecting a new model triggers a reload
 
 MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** automatically — no Metal shader code needed.
+
+---
+
+## Agentic Tool System
+
+The app includes an agentic tool system that lets the LLM invoke local tools during conversation. When tools are enabled, the model can request actions by emitting a `tool_call` JSON block in its response.
+
+### Built-in Tools
+
+| Tool | Name | Risk | Description |
+|---|---|---|---|
+| File System | `file_system` | Medium | Read, write, list, and search files |
+| Shell | `shell` | High | Execute shell commands via `/bin/bash` (30s timeout) |
+| Clipboard | `clipboard` | Low | Read/write the system clipboard |
+| App Launcher | `open` | Medium | Open apps, URLs, files, or list running applications |
+
+### Approval Flow
+
+- **Low risk** tools still require one-time approval
+- **Medium/high risk** tools show a detailed approval sheet with argument preview
+- Users can choose **Allow**, **Always Allow** (persisted), or **Deny**
+- The agentic loop runs up to 10 iterations per user message
+
+### Adding a New Tool
+
+1. Create a new Swift file in `AgentTools/` conforming to the `AgentTool` protocol
+2. Define `name`, `toolDescription`, `parameters`, `requiresApproval`, and `riskLevel`
+3. Implement `execute(arguments:)` returning a `ToolResult`
+4. Register it in `ToolRegistry.registerDefaults()`:
+
+```swift
+func registerDefaults() {
+    register(FileSystemTool())
+    register(ShellCommandTool())
+    register(ClipboardTool())
+    register(AppLauncherTool())
+    register(MyNewTool())      // ← add here
+}
+```
 
 ---
 
@@ -176,14 +236,49 @@ MLX uses Apple Silicon's **unified memory** and **Metal GPU acceleration** autom
 
 ---
 
+## Vision & Roadmap
+
+For the full product vision, architecture, and phased roadmap, see the **[Vision Documents](docs/vision/)**:
+
+| Document | Summary |
+|---|---|
+| [Concept](docs/vision/01-concept.md) | High-level vision, guiding principles, value proposition |
+| [Requirements](docs/vision/02-requirements.md) | Functional & non-functional requirements |
+| [Domain Model](docs/vision/03-domain-model.md) | Core entities and data flows |
+| [Features & Use Cases](docs/vision/04-features-and-use-cases.md) | Feature catalog and user stories |
+| [Architecture](docs/vision/05-architecture.md) | Target architecture and integration patterns |
+| [Roadmap](docs/vision/06-roadmap.md) | Phased delivery plan with milestones |
+
+### Next Steps
+## Agent Instructions
+
+The repository includes Copilot/agent instructions to help AI coding assistants work effectively:
+
+| File | Purpose |
+|---|---|
+| `.github/copilot-instructions.md` | Global instructions: architecture overview, Swift conventions, patterns, entitlements, tool system, and PR checklist |
+| `.github/pull_request_template.md` | PR template with checklist covering code quality and documentation updates |
+
+These files are automatically picked up by GitHub Copilot and other AI agents when working in this repository.
+
+---
+
 ## Next Steps
 
+- [x] Add model picker UI (choose from model catalog at runtime)
+- [x] Context bubbles — inject skills, instructions, and memories into the system prompt
+- [x] System prompt editor with composed-prompt preview
+- [x] Persist context bubbles and system prompt to disk
+- [x] Agentic tool calling with approval flow
+- [x] Dynamic model catalog fetched from Hugging Face API
+- [x] Markdown rendering for assistant replies (code blocks, headings, lists)
+- [x] Agentic tool system with file, shell, clipboard, and app launcher tools
+- [x] Tool approval UI with risk levels and always-approve option
 - [ ] Add token-per-second metrics display
-- [ ] Add model picker UI (choose from `LLMRegistry` at runtime)
 - [ ] Persist conversation history to disk
 - [ ] Add VLM (vision) support via `MLXVLM`
 - [ ] Add embeddings / RAG pipeline via `MLXEmbedders`
-- [ ] Add tool calling support
+- [ ] Menu bar agent and global keyboard shortcut
 
 ---
 
