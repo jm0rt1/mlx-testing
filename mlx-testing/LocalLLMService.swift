@@ -11,8 +11,10 @@ protocol LLMService: AnyObject {
     var downloadProgress: Double { get }
     var statusMessage: String { get }
     func load() async throws
+    /// Generate a streaming response to `prompt`. The prompt is a single string
+    /// (either the user's message or a tool-result injection).
     func generateReplyStreaming(
-        from messages: [ChatMessage],
+        prompt: String,
         systemPrompt: String,
         onToken: @escaping @MainActor (String) -> Void
     ) async throws
@@ -119,7 +121,7 @@ final class LocalLLMServiceMLX: LLMService {
     // MARK: - Generation
 
     func generateReplyStreaming(
-        from messages: [ChatMessage],
+        prompt: String,
         systemPrompt: String,
         onToken: @escaping @MainActor (String) -> Void
     ) async throws {
@@ -127,13 +129,13 @@ final class LocalLLMServiceMLX: LLMService {
             throw LLMServiceError.modelNotLoaded
         }
 
-        guard let lastUserMessage = messages.last(where: { $0.role == .user }) else {
+        guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LLMServiceError.noUserMessage
         }
 
         statusMessage = "Generating…"
 
-        let stream = session.streamResponse(to: lastUserMessage.text)
+        let stream = session.streamResponse(to: prompt)
 
         generationTask = Task {
             for try await chunk in stream {
@@ -179,7 +181,7 @@ final class LocalLLMServiceStub: LLMService {
     }
 
     func generateReplyStreaming(
-        from messages: [ChatMessage],
+        prompt: String,
         systemPrompt: String,
         onToken: @escaping @MainActor (String) -> Void
     ) async throws {
@@ -187,7 +189,7 @@ final class LocalLLMServiceStub: LLMService {
         statusMessage = "Generating (stub)…"
 
         let reply = "**[Stub]** System prompt has \(systemPrompt.count) chars. "
-            + "Received \(messages.filter { $0.role == .user }.count) user message(s). "
+            + "Prompt: \(prompt.prefix(100)). "
             + "This is a simulated streaming reply."
 
         let tokens = reply.split(separator: " ").map(String.init)

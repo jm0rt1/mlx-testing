@@ -23,6 +23,10 @@ final class ChatViewModel: ObservableObject {
     /// Whether the agentic tool system is enabled.
     @Published var toolsEnabled: Bool = true
 
+    /// Debug log entries for the agentic loop — visible in the UI debug console.
+    @Published private(set) var debugLog: [String] = []
+    @Published var showDebugConsole: Bool = false
+
     /// Toggle between MLX and stub back-ends.
     @Published var backend: LLMBackend {
         didSet { switchService() }
@@ -57,7 +61,6 @@ final class ChatViewModel: ObservableObject {
 
     // ── Private state ──────────────────────────────────────────────────
     private var llmService: LLMService
-    private var generationTask: Task<Void, Never>?
 
     /// Max agentic loop iterations to prevent runaway tool calling.
     private let maxToolIterations = 10
@@ -154,7 +157,8 @@ final class ChatViewModel: ObservableObject {
     // ── Composed system prompt (includes tool schemas when enabled) ────
 
     private var fullSystemPrompt: String {
-        var prompt = contextStore.composedSystemPrompt
+        // /no_think suppresses chain-of-thought output on Qwen3 models
+        var prompt = "/no_think\n\n" + contextStore.composedSystemPrompt
 
         if toolsEnabled && !toolRegistry.tools.isEmpty {
             prompt += "\n\n" + toolRegistry.toolSchemaPrompt()
@@ -172,6 +176,7 @@ final class ChatViewModel: ObservableObject {
         messages.append(ChatMessage(role: .user, text: trimmed))
         input = ""
         isLoading = true
+        isCancelled = false
         status = "Generating…"
 
         await agenticLoop()
@@ -179,173 +184,199 @@ final class ChatViewModel: ObservableObject {
         isLoading = false
     }
 
+    /// Tracks whether generation was cancelled.
+    private var isCancelled = false
+
     /// The core agentic loop: generate → check for tool calls → execute → feed back → repeat.
-    private func agenticLoop() {
-        generationTask = Task {
-            var iterations = 0
+    private func agenticLoop() async {
+        var iterations = 0
 
-            while iterations < maxToolIterations {
-                iterations += 1
+        // The first prompt is the user's message; subsequent prompts are tool results
+        guard let userMessage = messages.last(where: { $0.role == .user })?.text else { return }
+        var currentPrompt = userMessage
 
-                // 1) Generate assistant response
-                let assistantID = UUID()
-                messages.append(ChatMessage(id: assistantID, role: .assistant, text: ""))
+        while iterations < maxToolIterations && !isCancelled {
+            iterations += 1
+            appendDebug("── Iteration \(iterations) ──")
+            appendDebug("Prompt (\(currentPrompt.count) chars): \(currentPrompt.prefix(300))")
 
-                let composedPrompt = fullSystemPrompt
+            // 1) Generate assistant response
+            let assistantID = UUID()
+            messages.append(ChatMessage(id: assistantID, role: .assistant, text: ""))
 
-                do {
-                    try await llmService.generateReplyStreaming(
-                        from: messages,
-                        systemPrompt: composedPrompt
-                    ) { [weak self] token in
-                        guard let self else { return }
-                        if let idx = self.messages.lastIndex(where: { $0.id == assistantID }) {
-                            self.messages[idx].text += token
-                            self.messages[idx].text = Self.sanitizeResponse(self.messages[idx].text)
-                        }
+            let composedPrompt = fullSystemPrompt
+
+            do {
+                try await llmService.generateReplyStreaming(
+                    prompt: currentPrompt,
+                    systemPrompt: composedPrompt
+                ) { [weak self] token in
+                    guard let self else { return }
+                    if let idx = self.messages.lastIndex(where: { $0.id == assistantID }) {
+                        self.messages[idx].text += token
                     }
-
-                    // Final sanitize
-                    if let idx = messages.lastIndex(where: { $0.id == assistantID }) {
-                        messages[idx].text = Self.sanitizeResponse(messages[idx].text)
-                    }
-                } catch is CancellationError {
-                    status = "Cancelled"
-                    return
-                } catch {
-                    if let idx = messages.lastIndex(where: { $0.id == assistantID }) {
-                        messages[idx].text = "⚠️ \(error.localizedDescription)"
-                    }
-                    status = "Generation failed"
-                    return
                 }
 
-                // 2) Check if the response contains a tool call
-                guard toolsEnabled else {
-                    status = "Done"
-                    return
-                }
-
-                let fullResponse = messages.first(where: { $0.id == assistantID })?.text ?? ""
-                guard let toolCall = toolExecutor.parseToolCall(from: fullResponse) else {
-                    // No tool call — normal response, we're done
-                    status = "Done"
-                    return
-                }
-
-                // 3) Extract prose and update the assistant message
-                let prose = toolExecutor.extractProse(from: fullResponse)
+                // Sanitize the complete response
                 if let idx = messages.lastIndex(where: { $0.id == assistantID }) {
-                    messages[idx].text = prose.isEmpty ? "Calling tool: \(toolCall.toolName)…" : prose
+                    messages[idx].text = Self.sanitizeResponse(messages[idx].text)
                 }
-
-                // 4) Add a tool call bubble
-                let flatArgs = toolCall.arguments.mapValues { $0.stringValue }
-                let callInfo = ToolCallInfo(
-                    toolName: toolCall.toolName,
-                    arguments: flatArgs,
-                    status: .pending
-                )
-                let callMsgID = UUID()
-                messages.append(ChatMessage(
-                    id: callMsgID,
-                    role: .toolCall,
-                    text: "🔧 \(toolCall.toolName)",
-                    toolCall: callInfo
-                ))
-
-                status = "Tool: \(toolCall.toolName) — awaiting approval…"
-
-                // 5) Check approval
-                let needsApproval = toolRegistry.needsApproval(for: toolCall.toolName)
-
-                if needsApproval {
-                    // Ask user for approval
-                    let response = await requestApproval(for: toolCall)
-
-                    switch response {
-                    case .deny:
-                        if let idx = messages.lastIndex(where: { $0.id == callMsgID }) {
-                            messages[idx].toolCall?.status = .denied
-                        }
-                        messages.append(ChatMessage(
-                            role: .toolResult,
-                            text: "⛔ Tool call denied by user.",
-                            toolResult: ToolResultInfo(
-                                toolName: toolCall.toolName,
-                                success: false,
-                                output: "User denied execution.",
-                                artifacts: []
-                            )
-                        ))
-                        status = "Tool denied"
-                        return
-
-                    case .approve:
-                        break // continue to execute
-
-                    case .alwaysApprove:
-                        toolRegistry.alwaysApproved.insert(toolCall.toolName)
-                    }
+            } catch is CancellationError {
+                status = "Cancelled"
+                appendDebug("❌ Generation cancelled")
+                return
+            } catch {
+                if let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                    messages[idx].text = "⚠️ \(error.localizedDescription)"
                 }
-
-                // 6) Execute the tool
-                if let idx = messages.lastIndex(where: { $0.id == callMsgID }) {
-                    messages[idx].toolCall?.status = .executing
-                }
-                status = "Executing \(toolCall.toolName)…"
-
-                do {
-                    let result = try await toolExecutor.execute(toolCall)
-
-                    // Update call status
-                    if let idx = messages.lastIndex(where: { $0.id == callMsgID }) {
-                        messages[idx].toolCall?.status = .completed
-                    }
-
-                    // Add result bubble
-                    let resultInfo = ToolResultInfo(
-                        toolName: result.toolName,
-                        success: result.success,
-                        output: result.output,
-                        artifacts: result.artifacts
-                    )
-                    messages.append(ChatMessage(
-                        role: .toolResult,
-                        text: result.output,
-                        toolResult: resultInfo
-                    ))
-
-                    status = "Tool complete — continuing…"
-
-                } catch {
-                    if let idx = messages.lastIndex(where: { $0.id == callMsgID }) {
-                        messages[idx].toolCall?.status = .failed
-                    }
-                    messages.append(ChatMessage(
-                        role: .toolResult,
-                        text: "❌ Tool error: \(error.localizedDescription)",
-                        toolResult: ToolResultInfo(
-                            toolName: toolCall.toolName,
-                            success: false,
-                            output: error.localizedDescription,
-                            artifacts: []
-                        )
-                    ))
-                    status = "Tool failed"
-                    return
-                }
-
-                // 7) Loop back: the model will see the tool result and can respond or call another tool
+                status = "Generation failed"
+                appendDebug("❌ Generation error: \(error.localizedDescription)")
+                return
             }
 
-            status = "Done (max tool iterations reached)"
+            guard !isCancelled else {
+                status = "Cancelled"
+                return
+            }
+
+            // 2) Check if the response contains a tool call
+            guard toolsEnabled else {
+                status = "Done"
+                appendDebug("Tools disabled — done.")
+                return
+            }
+
+            guard let idx = messages.lastIndex(where: { $0.id == assistantID }) else {
+                status = "Done"
+                return
+            }
+            let fullResponse = messages[idx].text
+            appendDebug("Response (\(fullResponse.count) chars): \(fullResponse.prefix(500))")
+
+            // Hex dump to catch non-standard backtick characters
+            let bytes = Array(fullResponse.utf8)
+            let hexFirst = bytes.prefix(40).map { String(format: "%02x", $0) }.joined(separator: " ")
+            let hexLast = bytes.suffix(20).map { String(format: "%02x", $0) }.joined(separator: " ")
+            appendDebug("Hex (first 40): \(hexFirst)")
+            appendDebug("Hex (last 20): \(hexLast)")
+            appendDebug("Contains backtick (0x60): \(fullResponse.contains("`"))")
+            appendDebug("Contains 'tool_call': \(fullResponse.contains("tool_call"))")
+            appendDebug("Contains '\"tool\"': \(fullResponse.contains("\"tool\""))")
+
+            guard let toolCall = toolExecutor.parseToolCall(from: fullResponse) else {
+                appendDebug("✅ No tool call found — done.")
+                status = "Done"
+                return
+            }
+
+            appendDebug("🔧 Parsed tool call: \(toolCall.toolName)")
+            appendDebug("   Args: \(toolCall.arguments.map { "\($0.key)=\($0.value)" }.joined(separator: ", "))")
+
+            // 3) Extract prose and update the assistant message
+            let prose = toolExecutor.extractProse(from: fullResponse)
+            messages[idx].text = prose.isEmpty ? "Calling tool: \(toolCall.toolName)…" : prose
+
+            // 4) Add a tool call bubble
+            let flatArgs = toolCall.arguments.mapValues { $0.stringValue }
+            let callInfo = ToolCallInfo(
+                toolName: toolCall.toolName,
+                arguments: flatArgs,
+                status: .pending
+            )
+            let callMsgID = UUID()
+            messages.append(ChatMessage(
+                id: callMsgID,
+                role: .toolCall,
+                text: "🔧 \(toolCall.toolName)",
+                toolCall: callInfo
+            ))
+
+            status = "Tool: \(toolCall.toolName) — awaiting approval…"
+
+            // 5) Check approval
+            if toolRegistry.needsApproval(for: toolCall.toolName) {
+                appendDebug("⏳ Waiting for user approval…")
+                let response = await requestApproval(for: toolCall)
+
+                switch response {
+                case .deny:
+                    appendDebug("⛔ User denied tool call")
+                    if let ci = messages.lastIndex(where: { $0.id == callMsgID }) {
+                        messages[ci].toolCall?.status = .denied
+                    }
+                    messages.append(ChatMessage(
+                        role: .toolResult,
+                        text: "⛔ Tool call denied by user.",
+                        toolResult: ToolResultInfo(toolName: toolCall.toolName, success: false, output: "User denied execution.", artifacts: [])
+                    ))
+                    status = "Tool denied"
+                    return
+
+                case .approve:
+                    appendDebug("✅ User approved")
+                    break
+
+                case .alwaysApprove:
+                    appendDebug("✅ User approved (always)")
+                    toolRegistry.alwaysApproved.insert(toolCall.toolName)
+                }
+            } else {
+                appendDebug("✅ Auto-approved (always approved)")
+            }
+
+            // 6) Execute the tool
+            if let ci = messages.lastIndex(where: { $0.id == callMsgID }) {
+                messages[ci].toolCall?.status = .executing
+            }
+            status = "Executing \(toolCall.toolName)…"
+            appendDebug("⚙️ Executing \(toolCall.toolName)…")
+
+            do {
+                let result = try await toolExecutor.execute(toolCall)
+                appendDebug("✅ Tool result: \(result.success ? "success" : "failure")")
+                appendDebug("   Output (\(result.output.count) chars): \(result.output.prefix(300))")
+
+                if let ci = messages.lastIndex(where: { $0.id == callMsgID }) {
+                    messages[ci].toolCall?.status = .completed
+                }
+
+                let resultText = result.output
+                messages.append(ChatMessage(
+                    role: .toolResult,
+                    text: resultText,
+                    toolResult: ToolResultInfo(toolName: result.toolName, success: result.success, output: result.output, artifacts: result.artifacts)
+                ))
+                status = "Tool complete — continuing…"
+
+                // KEY FIX: Feed the tool result back to the model as the next prompt
+                currentPrompt = """
+                [Tool Result from \(result.toolName)]
+                Success: \(result.success)
+                Output:
+                \(result.output)
+
+                Now respond to the user based on this tool result. Do not call the same tool again unless you need different information.
+                """
+                appendDebug("📤 Feeding tool result back as next prompt (\(currentPrompt.count) chars)")
+
+            } catch {
+                appendDebug("❌ Tool error: \(error.localizedDescription)")
+                if let ci = messages.lastIndex(where: { $0.id == callMsgID }) {
+                    messages[ci].toolCall?.status = .failed
+                }
+                messages.append(ChatMessage(
+                    role: .toolResult,
+                    text: "❌ Tool error: \(error.localizedDescription)",
+                    toolResult: ToolResultInfo(toolName: toolCall.toolName, success: false, output: error.localizedDescription, artifacts: [])
+                ))
+                status = "Tool failed"
+                return
+            }
+
+            // 7) Loop back — currentPrompt is now the tool result
         }
 
-        // Await the task
-        Task {
-            await generationTask?.value
-        }
+        status = iterations >= maxToolIterations ? "Done (max tool iterations reached)" : "Done"
     }
 
     // ── Tool Approval Flow ─────────────────────────────────────────────
@@ -416,8 +447,7 @@ final class ChatViewModel: ObservableObject {
     // ── Cancel generation ──────────────────────────────────────────────
 
     func cancelGeneration() {
-        generationTask?.cancel()
-        generationTask = nil
+        isCancelled = true
         llmService.cancelGeneration()
         isLoading = false
         status = "Cancelled"
@@ -436,4 +466,27 @@ final class ChatViewModel: ObservableObject {
         toolExecutor.clearHistory()
         status = llmService.isLoaded ? "Model loaded" : "Idle"
     }
+
+    // ── Debug logging ────────────────────────────────────────────────────
+
+    private func appendDebug(_ message: String) {
+        let ts = Self.debugDateFormatter.string(from: Date())
+        let entry = "[\(ts)] \(message)"
+        debugLog.append(entry)
+        print("[Debug] \(entry)")
+        // Keep last 500 entries
+        if debugLog.count > 500 {
+            debugLog.removeFirst(debugLog.count - 500)
+        }
+    }
+
+    func clearDebugLog() {
+        debugLog = []
+    }
+
+    private static let debugDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "HH:mm:ss.SSS"
+        return df
+    }()
 }

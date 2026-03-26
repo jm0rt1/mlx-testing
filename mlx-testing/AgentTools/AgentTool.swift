@@ -135,6 +135,14 @@ struct ToolCall: Identifiable, Codable {
         case toolName = "tool"
         case arguments
     }
+
+    // Custom decoder: the model never outputs "id", so generate one if missing.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
+        self.toolName = try container.decode(String.self, forKey: .toolName)
+        self.arguments = (try? container.decode([String: ToolArgumentValue].self, forKey: .arguments)) ?? [:]
+    }
 }
 
 // MARK: - Tool Result

@@ -44,6 +44,10 @@ struct ContentView: View {
 
                 Divider()
 
+                if vm.showDebugConsole {
+                    DebugConsole(log: vm.debugLog, onClear: { vm.clearDebugLog() })
+                }
+
                 InputBar(
                     input: $vm.input,
                     isLoading: vm.isLoading,
@@ -67,6 +71,12 @@ struct ContentView: View {
                 .help(vm.toolsEnabled
                       ? "Agent tools enabled (\(vm.toolRegistry.tools.count) tools)"
                       : "Agent tools disabled")
+
+                Toggle(isOn: $vm.showDebugConsole) {
+                    Label("Debug", systemImage: "ladybug")
+                }
+                .toggleStyle(.button)
+                .help("Toggle debug console")
 
                 Button {
                     showSystemPrompt = true
@@ -557,6 +567,69 @@ private struct InputBar: View {
             }
         }
         .padding(10)
+    }
+}
+
+// MARK: - Debug Console
+
+private struct DebugConsole: View {
+    let log: [String]
+    let onClear: () -> Void
+
+    private var fullText: String { log.joined(separator: "\n") }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Debug Console", systemImage: "ladybug")
+                    .font(.caption.bold())
+                    .foregroundStyle(.orange)
+                Spacer()
+                Text("\(log.count) entries")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(fullText, forType: .string)
+                } label: {
+                    Label("Copy All", systemImage: "doc.on.doc")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Copy entire log to clipboard")
+                .disabled(log.isEmpty)
+
+                Button("Clear", action: onClear)
+                    .font(.caption2)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.orange.opacity(0.08))
+
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(fullText.isEmpty ? "(empty)" : fullText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.primary.opacity(0.7))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .id("bottom")
+                }
+                .onChange(of: log.count) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+            .frame(height: 140)
+            .background(Color(.textBackgroundColor).opacity(0.5))
+        }
     }
 }
 

@@ -22,50 +22,107 @@ final class ToolExecutor: ObservableObject {
 
     // MARK: - Parsing
 
-    /// Scans the LLM's response text for a ```tool_call``` JSON block.
-    /// Returns the parsed ToolCall if found, nil otherwise.
+    /// Scans the LLM's response text for a tool call.
+    /// Tries multiple patterns from strict (fenced) to lenient (bare JSON).
     func parseToolCall(from text: String) -> ToolCall? {
-        // Look for ```tool_call ... ``` blocks
-        let patterns: [String] = [
-            #"```tool_call\s*\n([\s\S]*?)\n\s*```"#,   // fenced with tool_call tag
-            #"```json\s*\n(\{[\s\S]*?"tool"[\s\S]*?\})\s*\n\s*```"#,  // fenced json with "tool" key
-            #"```\s*\n(\{[\s\S]*?"tool"[\s\S]*?\})\s*\n\s*```"#,      // plain fenced with "tool" key
+        print("[ToolParser] Parsing \(text.count) chars")
+        print("[ToolParser] Text: \(text.prefix(300))")
+
+        // Strategy 1: fenced ```tool_call ... ```
+        // Strategy 2: fenced ```json ... ``` with "tool" key
+        // Strategy 3: fenced ``` ... ``` with "tool" key
+        // Strategy 4: bare inline JSON {"tool": ...}
+        // Strategy 5: tool_call{...} (no space, model smashes them together)
+        let fencedPatterns: [(String, String)] = [
+            ("fenced tool_call", #"```tool_call\s*\n?([\s\S]*?)\n?\s*```"#),
+            ("fenced json+tool", #"```json\s*\n?(\{[\s\S]*?"tool"[\s\S]*?\})\s*\n?\s*```"#),
+            ("fenced bare+tool", #"```\s*\n?(\{[\s\S]*?"tool"[\s\S]*?\})\s*\n?\s*```"#),
         ]
 
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: []),
-                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-                  let range = Range(match.range(at: 1), in: text) else {
-                continue
-            }
-
-            let jsonString = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let data = jsonString.data(using: .utf8) else { continue }
-
-            do {
-                let decoded = try JSONDecoder().decode(ToolCall.self, from: data)
-                return decoded
-            } catch {
-                print("[ToolExecutor] Failed to decode tool call: \(error)")
-                print("[ToolExecutor] JSON was: \(jsonString)")
-                continue
+        for (label, pattern) in fencedPatterns {
+            print("[ToolParser] Trying: \(label)")
+            if let call = tryParse(text: text, pattern: pattern) {
+                print("[ToolParser] ✅ Matched: \(label) → \(call.toolName)")
+                return call
             }
         }
 
+        // Strategy 4: bare JSON object with "tool" key anywhere in the text
+        let barePatterns: [(String, String)] = [
+            ("bare JSON full", #"(\{[^{}]*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}\s*\})"#),
+            ("bare JSON simple", #"(\{[^{}]*"tool"\s*:\s*"[^"]+"[^{}]*\})"#),
+        ]
+
+        for (label, pattern) in barePatterns {
+            print("[ToolParser] Trying: \(label)")
+            if let call = tryParse(text: text, pattern: pattern) {
+                print("[ToolParser] ✅ Matched: \(label) → \(call.toolName)")
+                return call
+            }
+        }
+
+        // Strategy 5: tool_call smashed onto JSON like tool_call{"tool":...}
+        let smashedPattern = #"tool_call\s*(\{[\s\S]*?"tool"[\s\S]*?\})"#
+        print("[ToolParser] Trying: smashed")
+        if let call = tryParse(text: text, pattern: smashedPattern) {
+            print("[ToolParser] ✅ Matched: smashed → \(call.toolName)")
+            return call
+        }
+
+        print("[ToolParser] ❌ No pattern matched")
         return nil
     }
 
-    /// Extracts the "prose" portion of the response (everything outside the tool_call block).
+    /// Attempts to extract and decode a ToolCall using the given regex pattern.
+    private func tryParse(text: String, pattern: String) -> ToolCall? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            print("[ToolParser]   regex compile failed")
+            return nil
+        }
+
+        guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else {
+            print("[ToolParser]   no regex match")
+            return nil
+        }
+
+        guard match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: text) else {
+            print("[ToolParser]   no capture group")
+            return nil
+        }
+
+        let jsonString = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[ToolParser]   captured JSON (\(jsonString.count) chars): \(jsonString.prefix(200))")
+
+        guard let data = jsonString.data(using: .utf8) else {
+            print("[ToolParser]   failed to convert to data")
+            return nil
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(ToolCall.self, from: data)
+            return decoded
+        } catch {
+            print("[ToolParser]   JSON decode error: \(error)")
+            print("[ToolParser]   JSON was: \(jsonString)")
+            return nil
+        }
+    }
+
+    /// Extracts the "prose" portion of the response (everything outside tool call blocks).
     func extractProse(from text: String) -> String {
         var result = text
 
-        let patterns: [String] = [
-            #"```tool_call\s*\n[\s\S]*?\n\s*```"#,
-            #"```json\s*\n\{[\s\S]*?"tool"[\s\S]*?\}\s*\n\s*```"#,
-            #"```\s*\n\{[\s\S]*?"tool"[\s\S]*?\}\s*\n\s*```"#,
+        // Remove all forms of tool call blocks
+        let removalPatterns: [String] = [
+            #"```tool_call\s*\n?[\s\S]*?\n?\s*```"#,
+            #"```json\s*\n?\{[\s\S]*?"tool"[\s\S]*?\}\s*\n?\s*```"#,
+            #"```\s*\n?\{[\s\S]*?"tool"[\s\S]*?\}\s*\n?\s*```"#,
+            #"tool_call\s*\{[^{}]*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}\s*\}"#,
+            #"\{[^{}]*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}\s*\}"#,
         ]
 
-        for pattern in patterns {
+        for pattern in removalPatterns {
             result = result.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
         }
 
@@ -74,8 +131,7 @@ final class ToolExecutor: ObservableObject {
 
     // MARK: - Execution
 
-    /// Execute a tool call. Checks approval status first.
-    /// If approval is needed and not granted, sets `pendingApproval` and throws `.denied`.
+    /// Execute a tool call. Validates parameters then runs the tool.
     func execute(_ call: ToolCall) async throws -> ToolResult {
         guard let tool = registry.tool(named: call.toolName) else {
             let result = ToolResult(

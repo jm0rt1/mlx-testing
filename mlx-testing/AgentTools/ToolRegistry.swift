@@ -57,14 +57,21 @@ final class ToolRegistry: ObservableObject {
         guard !tools.isEmpty else { return "" }
 
         var lines: [String] = []
+        lines.append("/no_think")
+        lines.append("")
         lines.append("[Available Tools]")
-        lines.append("You can call tools by including a JSON block in your response with this exact format:")
+        lines.append("You have access to tools you can call. To call a tool, output ONLY a JSON code block like this:")
+        lines.append("")
         lines.append("```tool_call")
         lines.append(#"{"tool": "tool_name", "arguments": {"param1": "value1"}}"#)
         lines.append("```")
         lines.append("")
-        lines.append("IMPORTANT: Only use ONE tool_call block per response. Wait for the result before calling another tool.")
-        lines.append("After receiving a tool result, analyze it and either respond to the user or make another tool call.")
+        lines.append("RULES:")
+        lines.append("- You MUST wrap the JSON in ```tool_call and ``` markers exactly as shown above.")
+        lines.append("- Do NOT output the JSON inline or without the code fence.")
+        lines.append("- Only use ONE tool_call block per response.")
+        lines.append("- Do NOT explain your reasoning before a tool call. Just output the tool_call block.")
+        lines.append("- After receiving a tool result, respond to the user naturally or make another tool call.")
         lines.append("")
 
         let sortedTools = tools.values.sorted { $0.name < $1.name }
