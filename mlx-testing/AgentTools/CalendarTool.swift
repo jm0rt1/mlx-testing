@@ -142,8 +142,8 @@ struct CalendarTool: AgentTool {
     // MARK: - List Events
 
     private func listEvents(store: EKEventStore, arguments: [String: ToolArgumentValue]) -> ToolResult {
-        let start = arguments["start_date"]?.stringValue.flatMap(parseDate) ?? Date()
-        let end = arguments["end_date"]?.stringValue.flatMap(parseDate)
+        let start = dateArg("start_date", from: arguments) ?? Date()
+        let end = dateArg("end_date", from: arguments)
             ?? Calendar.current.date(byAdding: .day, value: 7, to: start)
             ?? start.addingTimeInterval(7 * 24 * 3600)
 
@@ -163,23 +163,25 @@ struct CalendarTool: AgentTool {
             )
         }
 
-        let maxEvents = 50
+        // Keep output concise so the model can process it without choking
+        let maxEvents = 15
         let truncated = events.count > maxEvents
         let lines = events.prefix(maxEvents).map { event -> String in
-            var line = "• [\(event.eventIdentifier ?? "?")] \(event.title ?? "(no title)")"
-            line += "\n  📅 \(formatDate(event.startDate)) → \(formatDate(event.endDate))"
+            var line = "• \(event.title ?? "(no title)")"
+            line += "  —  \(formatDate(event.startDate)) → \(formatDate(event.endDate))"
             if let location = event.location, !location.isEmpty {
-                line += "\n  📍 \(location)"
+                line += "  📍 \(location)"
             }
-            if let cal = event.calendar {
-                line += "\n  🗓 \(cal.title)"
-            }
+            line += "  [\(event.calendar?.title ?? "?")]"
             return line
         }
 
         var output = "Events (\(events.count)\(truncated ? ", showing first \(maxEvents)" : ""))"
-        output += " from \(formatDate(start)) to \(formatDate(end)):\n\n"
-        output += lines.joined(separator: "\n\n")
+        output += " from \(formatDate(start)) to \(formatDate(end)):\n"
+        output += lines.joined(separator: "\n")
+        if truncated {
+            output += "\n… and \(events.count - maxEvents) more events."
+        }
         return ToolResult(toolName: name, success: true, output: output)
     }
 
@@ -351,10 +353,10 @@ struct CalendarTool: AgentTool {
     private func searchEvents(store: EKEventStore, arguments: [String: ToolArgumentValue]) -> ToolResult {
         let query = arguments["query"]?.stringValue ?? arguments["title"]?.stringValue ?? ""
         let now = Date()
-        let start = arguments["start_date"]?.stringValue.flatMap(parseDate)
+        let start = dateArg("start_date", from: arguments)
             ?? Calendar.current.date(byAdding: .month, value: -1, to: now)
             ?? now.addingTimeInterval(-30 * 24 * 3600)
-        let end = arguments["end_date"]?.stringValue.flatMap(parseDate)
+        let end = dateArg("end_date", from: arguments)
             ?? Calendar.current.date(byAdding: .month, value: 3, to: now)
             ?? now.addingTimeInterval(90 * 24 * 3600)
 
@@ -400,6 +402,12 @@ struct CalendarTool: AgentTool {
     }
 
     // MARK: - Helpers
+
+    /// Safely extract a date from an optional argument value.
+    private func dateArg(_ key: String, from arguments: [String: ToolArgumentValue]) -> Date? {
+        guard let value = arguments[key]?.stringValue else { return nil }
+        return parseDate(value)
+    }
 
     /// Parse an ISO 8601 date string (with or without time component) or "yyyy-MM-dd HH:mm" format.
     private func parseDate(_ string: String) -> Date? {

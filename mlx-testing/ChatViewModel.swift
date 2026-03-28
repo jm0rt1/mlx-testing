@@ -158,7 +158,23 @@ final class ChatViewModel: ObservableObject {
 
     private var fullSystemPrompt: String {
         // /no_think suppresses chain-of-thought output on Qwen3 models
-        var prompt = "/no_think\n\n" + contextStore.composedSystemPrompt
+        var prompt = "/no_think\n\n"
+
+        // Inject current date/time so the model can resolve relative references
+        let now = Date()
+        let dateFmt = DateFormatter()
+        dateFmt.dateFormat = "yyyy-MM-dd"
+        let timeFmt = DateFormatter()
+        timeFmt.dateFormat = "HH:mm"
+        let dayFmt = DateFormatter()
+        dayFmt.dateFormat = "EEEE"
+        prompt += "[Current Date & Time]\n"
+        prompt += "Today is \(dayFmt.string(from: now)), \(dateFmt.string(from: now)). "
+        prompt += "The current time is \(timeFmt.string(from: now)).\n"
+        prompt += "When the user says 'tomorrow', use \(dateFmt.string(from: Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now)).\n"
+        prompt += "Always use ISO 8601 format (e.g. \(dateFmt.string(from: now))T09:00:00) for dates in tool calls.\n\n"
+
+        prompt += contextStore.composedSystemPrompt
 
         if toolsEnabled && !toolRegistry.tools.isEmpty {
             prompt += "\n\n" + toolRegistry.toolSchemaPrompt()
@@ -349,13 +365,21 @@ final class ChatViewModel: ObservableObject {
                 status = "Tool complete — continuing…"
 
                 // KEY FIX: Feed the tool result back to the model as the next prompt
-                currentPrompt = """
-                [Tool Result from \(result.toolName)]
-                Success: \(result.success)
-                Output:
-                \(result.output)
+                // Truncate large outputs to prevent the model from choking
+                let maxResultChars = 3000
+                let truncatedOutput: String
+                if result.output.count > maxResultChars {
+                    truncatedOutput = String(result.output.prefix(maxResultChars)) + "\n… (output truncated, \(result.output.count) total chars)"
+                } else {
+                    truncatedOutput = result.output
+                }
 
-                Now respond to the user based on this tool result. Do not call the same tool again unless you need different information.
+                currentPrompt = """
+                /no_think
+                [Tool Result from \(result.toolName)] \(result.success ? "Success" : "Failed"):
+                \(truncatedOutput)
+
+                Summarize this result for the user concisely.
                 """
                 appendDebug("📤 Feeding tool result back as next prompt (\(currentPrompt.count) chars)")
 
