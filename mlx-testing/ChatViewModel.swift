@@ -176,7 +176,7 @@ final class ChatViewModel: ObservableObject {
 
         prompt += contextStore.composedSystemPrompt
 
-        if toolsEnabled && !toolRegistry.tools.isEmpty {
+        if toolsEnabled && !toolRegistry.enabledTools.isEmpty {
             prompt += "\n\n" + toolRegistry.toolSchemaPrompt()
         }
 
@@ -287,6 +287,20 @@ final class ChatViewModel: ObservableObject {
 
             appendDebug("🔧 Parsed tool call: \(toolCall.toolName)")
             appendDebug("   Args: \(toolCall.arguments.map { "\($0.key)=\($0.value)" }.joined(separator: ", "))")
+
+            // 2b) Reject calls to disabled tools early (before approval flow)
+            guard toolRegistry.isToolEnabled(toolCall.toolName) else {
+                appendDebug("⛔ Tool '\(toolCall.toolName)' is disabled — skipping.")
+                let prose = toolExecutor.extractProse(from: fullResponse)
+                messages[idx].text = prose.isEmpty ? "Tried to call disabled tool: \(toolCall.toolName)" : prose
+                messages.append(ChatMessage(
+                    role: .toolResult,
+                    text: "⛔ Tool '\(toolCall.toolName)' is currently disabled.",
+                    toolResult: ToolResultInfo(toolName: toolCall.toolName, success: false, output: "Tool is disabled by user.", artifacts: [])
+                ))
+                status = "Tool disabled"
+                return
+            }
 
             // 3) Extract prose and update the assistant message
             let prose = toolExecutor.extractProse(from: fullResponse)

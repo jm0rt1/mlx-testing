@@ -18,7 +18,8 @@ struct ContentView: View {
                     modelName: vm.catalog.find(id: vm.selectedModelID)?.displayName
                         ?? vm.selectedModelID.components(separatedBy: "/").last ?? "Unknown",
                     toolsEnabled: vm.toolsEnabled,
-                    toolCount: vm.toolRegistry.tools.count
+                    enabledToolCount: vm.toolRegistry.enabledToolCount,
+                    totalToolCount: vm.toolRegistry.tools.count
                 )
 
                 Divider()
@@ -64,13 +65,7 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .automatic) {
-                Toggle(isOn: $vm.toolsEnabled) {
-                    Label("Tools", systemImage: vm.toolsEnabled ? "hammer.fill" : "hammer")
-                }
-                .toggleStyle(.button)
-                .help(vm.toolsEnabled
-                      ? "Agent tools enabled (\(vm.toolRegistry.tools.count) tools)"
-                      : "Agent tools disabled")
+                ToolPickerView(toolsEnabled: $vm.toolsEnabled, registry: vm.toolRegistry)
 
                 Toggle(isOn: $vm.showDebugConsole) {
                     Label("Debug", systemImage: "ladybug")
@@ -255,7 +250,8 @@ private struct StatusBar: View {
     let enabledContextCount: Int
     let modelName: String
     let toolsEnabled: Bool
-    let toolCount: Int
+    let enabledToolCount: Int
+    let totalToolCount: Int
 
     var body: some View {
         VStack(spacing: 4) {
@@ -293,7 +289,7 @@ private struct StatusBar: View {
                     HStack(spacing: 3) {
                         Image(systemName: "hammer.fill")
                             .imageScale(.small)
-                        Text("\(toolCount) tools")
+                        Text("\(enabledToolCount)/\(totalToolCount) tools")
                             .font(.caption2)
                     }
                     .foregroundStyle(.orange)
