@@ -131,8 +131,19 @@ final class ToolExecutor: ObservableObject {
 
     // MARK: - Execution
 
-    /// Execute a tool call. Validates parameters then runs the tool.
+    /// Execute a tool call. Validates the tool is enabled and parameters then runs the tool.
     func execute(_ call: ToolCall) async throws -> ToolResult {
+        // Check if the tool is enabled
+        guard registry.isToolEnabled(call.toolName) else {
+            let result = ToolResult(
+                toolName: call.toolName,
+                success: false,
+                output: "Tool '\(call.toolName)' is currently disabled."
+            )
+            record(call: call, result: result)
+            throw ToolError.toolNotFound(call.toolName)
+        }
+
         guard let tool = registry.tool(named: call.toolName) else {
             let result = ToolResult(
                 toolName: call.toolName,
