@@ -49,6 +49,7 @@ final class ToolRegistry: ObservableObject {
         register(ClipboardTool())
         register(AppLauncherTool())
         register(CalendarTool())
+        register(SafariBrowserTool())
     }
 
     // MARK: - Schema Generation
