@@ -17,7 +17,7 @@ A native macOS SwiftUI chat application that runs large language models **locall
 - **Dynamic model catalog** — fetches available MLX models from the Hugging Face API, with disk caching and periodic refresh
 - **Context bubbles** — toggleable context snippets (skills, instructions, memories, custom) automatically composed into the system prompt
 - **System prompt editor** — dedicated sheet for editing the base system prompt with a live composed-prompt preview
-- **Agentic tool system** — LLM can invoke local tools (file system, shell, clipboard, app launcher) with user approval flow
+- **Agentic tool system** — LLM can invoke local tools (file system, shell, clipboard, app launcher, calendar) with user approval flow
 - **Markdown rendering** — assistant replies render fenced code blocks, headings, lists, bold/italic, and inline code
 - **Persistent settings** — context bubbles, system prompt, model catalog, and tool approvals are auto-saved to `~/Library/Application Support/mlx-testing/`
 
@@ -80,6 +80,7 @@ The entitlements file (`mlx_testing.entitlements`) configures:
 | `com.apple.security.files.downloads.read-write` | File system tool: access the Downloads folder |
 | `com.apple.security.temporary-exception.files.home-relative-path.read-write` | File system tool: read/write files relative to home directory |
 | `com.apple.security.automation.apple-events` | App launcher tool: open applications via Apple Events |
+| `com.apple.security.personal-information.calendars` | Calendar tool: read and write Apple Calendar events |
 
 ---
 
@@ -109,7 +110,8 @@ mlx-testing/
 │   ├── FileSystemTool.swift      — Read, write, list, search files (medium risk)
 │   ├── ShellCommandTool.swift    — Execute shell commands via /bin/bash (high risk)
 │   ├── ClipboardTool.swift       — Read/write system clipboard (low risk)
-│   └── AppLauncherTool.swift     — Open apps, URLs, files, list running apps (medium risk)
+│   ├── AppLauncherTool.swift     — Open apps, URLs, files, list running apps (medium risk)
+│   └── CalendarTool.swift        — List, create, update, delete, and search Apple Calendar events (medium risk)
 ├── mlx_testing.entitlements    # Sandbox + network + memory + file access + automation entitlements
 └── Assets.xcassets/
 ```
@@ -197,6 +199,7 @@ The app includes an agentic tool system that lets the LLM invoke local tools dur
 | Shell | `shell` | High | Execute shell commands via `/bin/bash` (30s timeout) |
 | Clipboard | `clipboard` | Low | Read/write the system clipboard |
 | App Launcher | `open` | Medium | Open apps, URLs, files, or list running applications |
+| Calendar | `calendar` | Medium | List calendars, query/create/update/delete/search Apple Calendar events |
 
 ### Approval Flow
 

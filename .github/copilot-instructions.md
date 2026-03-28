@@ -32,7 +32,7 @@ There are currently no unit tests or CI workflows in the repository.
 | Services | `LocalLLMService.swift`, `ModelCatalogService.swift` | Protocol-based LLM abstraction + HF API catalog |
 | Data models | `ChatMessage.swift`, `ContextBubble.swift`, `ModelInfo.swift` | Plain structs, `Identifiable`, `Codable`, `Hashable` |
 | Persistence | `ContextStore.swift` | Saves to `~/Library/Application Support/mlx-testing/` via JSON + text files |
-| Agent tools | `AgentTools/AgentTool.swift`, `ToolRegistry.swift`, `ToolExecutor.swift`, `FileSystemTool.swift`, `ShellCommandTool.swift`, `ClipboardTool.swift`, `AppLauncherTool.swift` | Extensible tool system the LLM can invoke |
+| Agent tools | `AgentTools/AgentTool.swift`, `ToolRegistry.swift`, `ToolExecutor.swift`, `FileSystemTool.swift`, `ShellCommandTool.swift`, `ClipboardTool.swift`, `AppLauncherTool.swift`, `CalendarTool.swift` | Extensible tool system the LLM can invoke |
 | Config | `mlx_testing.entitlements` | macOS sandbox + network + memory + file access entitlements |
 
 ## Swift Conventions
@@ -60,6 +60,7 @@ The app sandbox is enabled. Current entitlements:
 | `com.apple.security.files.downloads.read-write` | Access Downloads folder |
 | `com.apple.security.temporary-exception.files.home-relative-path.read-write` | Home directory access for file tools |
 | `com.apple.security.automation.apple-events` | App launcher tool |
+| `com.apple.security.personal-information.calendars` | Calendar tool: read and write Apple Calendar events |
 
 If a new tool needs additional sandbox access, update **both** the entitlements plist and this table.
 
@@ -154,7 +155,8 @@ AgentTool (protocol)
 ├── FileSystemTool      — read/write/list/info/search files
 ├── ShellCommandTool    — execute /bin/bash commands with timeout
 ├── ClipboardTool       — read/write NSPasteboard
-└── AppLauncherTool     — open apps/URLs/files, list running apps
+├── AppLauncherTool     — open apps/URLs/files, list running apps
+└── CalendarTool        — list/create/update/delete/search Apple Calendar events
 
 ToolRegistry (singleton) — registers tools, generates schema prompt, manages approvals
 ToolExecutor            — parses tool_call JSON from LLM output, validates params, executes
