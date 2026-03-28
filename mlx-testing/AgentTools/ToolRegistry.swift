@@ -48,6 +48,7 @@ final class ToolRegistry: ObservableObject {
         register(ShellCommandTool())
         register(ClipboardTool())
         register(AppLauncherTool())
+        register(CalendarTool())
     }
 
     // MARK: - Schema Generation
