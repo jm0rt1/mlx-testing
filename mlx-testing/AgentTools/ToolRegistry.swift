@@ -22,10 +22,17 @@ final class ToolRegistry: ObservableObject {
         didSet { persistApprovals() }
     }
 
+    /// Tools the user has individually disabled (by name).
+    @Published var disabledTools: Set<String> = [] {
+        didSet { persistDisabledTools() }
+    }
+
     private let approvalsKey = "tool_always_approved"
+    private let disabledToolsKey = "tool_disabled"
 
     private init() {
         loadApprovals()
+        loadDisabledTools()
     }
 
     // MARK: - Registration
@@ -52,11 +59,37 @@ final class ToolRegistry: ObservableObject {
         register(SafariBrowserTool())
     }
 
+    // MARK: - Per-Tool Enable/Disable
+
+    func isToolEnabled(_ name: String) -> Bool {
+        !disabledTools.contains(name)
+    }
+
+    func setToolEnabled(_ name: String, enabled: Bool) {
+        if enabled {
+            disabledTools.remove(name)
+        } else {
+            disabledTools.insert(name)
+        }
+    }
+
+    /// Number of tools currently enabled.
+    var enabledToolCount: Int {
+        tools.keys.filter { !disabledTools.contains($0) }.count
+    }
+
+    /// Only tools that are currently enabled.
+    var enabledTools: [String: any AgentTool] {
+        tools.filter { !disabledTools.contains($0.key) }
+    }
+
     // MARK: - Schema Generation
 
     /// Generates the tool description block to inject into the system prompt.
+    /// Only includes enabled tools.
     func toolSchemaPrompt() -> String {
-        guard !tools.isEmpty else { return "" }
+        let active = enabledTools
+        guard !active.isEmpty else { return "" }
 
         var lines: [String] = []
         lines.append("/no_think")
@@ -76,7 +109,7 @@ final class ToolRegistry: ObservableObject {
         lines.append("- After receiving a tool result, respond to the user naturally or make another tool call.")
         lines.append("")
 
-        let sortedTools = tools.values.sorted { $0.name < $1.name }
+        let sortedTools = active.values.sorted { $0.name < $1.name }
         for tool in sortedTools {
             lines.append("### \(tool.name)")
             lines.append(tool.toolDescription)
@@ -110,6 +143,18 @@ final class ToolRegistry: ObservableObject {
     private func loadApprovals() {
         if let saved = UserDefaults.standard.stringArray(forKey: approvalsKey) {
             alwaysApproved = Set(saved)
+        }
+    }
+
+    // MARK: - Disabled Tools Persistence
+
+    private func persistDisabledTools() {
+        UserDefaults.standard.set(Array(disabledTools), forKey: disabledToolsKey)
+    }
+
+    private func loadDisabledTools() {
+        if let saved = UserDefaults.standard.stringArray(forKey: disabledToolsKey) {
+            disabledTools = Set(saved)
         }
     }
 

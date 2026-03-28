@@ -18,6 +18,7 @@ A native macOS SwiftUI chat application that runs large language models **locall
 - **Context bubbles** — toggleable context snippets (skills, instructions, memories, custom) automatically composed into the system prompt
 - **System prompt editor** — dedicated sheet for editing the base system prompt with a live composed-prompt preview
 - **Agentic tool system** — LLM can invoke local tools (file system, shell, clipboard, app launcher, calendar) with user approval flow
+- **Per-tool toggles** — enable or disable individual tools from a toolbar popover, with persistent preferences
 - **Markdown rendering** — assistant replies render fenced code blocks, headings, lists, bold/italic, and inline code
 - **Persistent settings** — context bubbles, system prompt, model catalog, and tool approvals are auto-saved to `~/Library/Application Support/mlx-testing/`
 
@@ -98,6 +99,7 @@ mlx-testing/
 ├── ModelInfo.swift             # Dynamic model entry (Codable) with HF metadata, download status, and RAM estimates
 ├── ModelCatalogService.swift   # Fetches MLX-compatible models from HF API, caches catalog to disk
 ├── ModelPickerView.swift       # Toolbar popover for selecting models with search, download status, and size info
+├── ToolPickerView.swift        # Toolbar popover for browsing and toggling individual tools on/off
 ├── MarkdownView.swift          # Lightweight Markdown renderer (code blocks, headings, lists, inline formatting)
 ├── ContextBubble.swift         # Data model for toggleable context snippets (skill, instruction, memory, custom)
 ├── ContextBubbleEditor.swift   # Sidebar UI for managing context bubbles (add, edit, delete, toggle)
