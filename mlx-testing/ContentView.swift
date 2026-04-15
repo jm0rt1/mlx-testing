@@ -1,13 +1,40 @@
 import SwiftUI
 
+private enum SidebarMode: String, CaseIterable, Identifiable {
+    case taskBoard = "Task Board"
+    case context = "Context"
+
+    var id: String { rawValue }
+}
+
 struct ContentView: View {
     @StateObject private var vm = ChatViewModel()
     @State private var showSystemPrompt = false
+    @State private var sidebarMode: SidebarMode = .taskBoard
 
     var body: some View {
         NavigationSplitView {
-            ContextBubbleEditor(store: vm.contextStore)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+            VStack(spacing: 0) {
+                Picker("Sidebar", selection: $sidebarMode) {
+                    ForEach(SidebarMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+
+                Divider()
+
+                Group {
+                    switch sidebarMode {
+                    case .taskBoard:
+                        TaskBoardView(store: vm.taskBoardStore)
+                    case .context:
+                        ContextBubbleEditor(store: vm.contextStore)
+                    }
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
             VStack(spacing: 0) {
                 StatusBar(

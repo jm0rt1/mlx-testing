@@ -59,6 +59,9 @@ final class ChatViewModel: ObservableObject {
     /// Dynamic model catalog — fetched from HF API, persisted to disk.
     let catalog = ModelCatalogService()
 
+    /// Durable task board for active goals and next actions.
+    let taskBoardStore = TaskBoardStore()
+
     // ── Private state ──────────────────────────────────────────────────
     private var llmService: LLMService
 
@@ -175,6 +178,11 @@ final class ChatViewModel: ObservableObject {
         prompt += "Always use ISO 8601 format (e.g. \(dateFmt.string(from: now))T09:00:00) for dates in tool calls.\n\n"
 
         prompt += contextStore.composedSystemPrompt
+
+        let taskBoardPrompt = taskBoardStore.promptContext
+        if !taskBoardPrompt.isEmpty {
+            prompt += "\n\n[Task Board]\n" + taskBoardPrompt
+        }
 
         if toolsEnabled && !toolRegistry.enabledTools.isEmpty {
             prompt += "\n\n" + toolRegistry.toolSchemaPrompt()
