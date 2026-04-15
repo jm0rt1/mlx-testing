@@ -37,7 +37,7 @@ final class LocalLLMServiceMLX: LLMService {
     private(set) var modelID: String
 
     var generateParameters: GenerateParameters = GenerateParameters(
-        maxTokens: 2048, temperature: 0.6
+        maxTokens: 1024, temperature: 0.3
     )
 
     private(set) var isLoaded = false

@@ -68,7 +68,7 @@ struct SystemPromptEditor: View {
             // ── Buttons ────────────────────────────────────────────
             HStack {
                 Button("Reset to Default") {
-                    store.systemPrompt = "You are a friendly, concise, and helpful assistant."
+                    store.systemPrompt = "You are EdgeClaw, a concise local-first assistant optimized for small on-device models. Keep responses clear and compact, prefer concrete next actions, and avoid unnecessary verbosity."
                 }
                 .foregroundStyle(.red)
                 Spacer()

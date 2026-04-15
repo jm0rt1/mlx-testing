@@ -59,7 +59,7 @@ final class ModelCatalogService: ObservableObject {
     private let cacheMaxAge: TimeInterval = 3600
 
     /// Default model ID to use if nothing is cached yet.
-    static let defaultModelID = "mlx-community/Qwen3-8B-4bit"
+    static let defaultModelID = "mlx-community/gemma-4-e4b-it-4bit"
 
     // MARK: - Persistence
 
